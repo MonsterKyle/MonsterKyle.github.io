@@ -5,18 +5,34 @@
 }
 
 body {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background-image: url('d66.png');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  width: 1078px;
+  height: 908px;
+  overflow: visible;
   font-family: sans-serif;
+  background: #000;
+}
+
+/* Centre the fixed-size canvas on screen if viewport is larger */
+html {
+  min-height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background: #000;
+}
+
+#bg-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1078px;
+  height: 908px;
+  display: block;
+  z-index: 0;
 }
 
 #generate-btn {
-  position: fixed;
+  position: absolute;
   top: 20px;
   left: 20px;
   z-index: 100;
@@ -44,9 +60,22 @@ body {
 }
 
 #canvas {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1078px;
+  height: 908px;
+  z-index: 1;
+}
+
+#line-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1078px;
+  height: 908px;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .dot-group {
@@ -55,6 +84,7 @@ body {
   align-items: center;
   gap: 10px;
   transform: translate(-50%, -50%);
+  z-index: 3;
 }
 
 .dot {
