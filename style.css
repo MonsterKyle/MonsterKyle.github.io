@@ -80,11 +80,19 @@ html {
 
 .dot-group {
   position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  transform: translate(-50%, -50%);
   z-index: 3;
+}
+
+.dot-group .dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.dot-group .dot-label {
+  position: absolute;
+  transform: translate(16px, -50%);
+  top: 0;
+  left: 0;
 }
 
 .dot {
