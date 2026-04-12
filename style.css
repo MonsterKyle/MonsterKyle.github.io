@@ -20,25 +20,27 @@ body {
   top: 20px;
   left: 20px;
   z-index: 100;
-  padding: 10px 22px;
+  padding: 11px 24px;
   font-size: 15px;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-  border: 2px solid rgba(255, 255, 255, 0.6);
+  font-weight: 700;
+  background: #FFE033;
+  color: #1a1a1a;
+  border: none;
   border-radius: 8px;
   cursor: pointer;
-  backdrop-filter: blur(6px);
-  transition: background 0.2s, transform 0.1s;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
   letter-spacing: 0.03em;
 }
 
 #generate-btn:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: #ffd000;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
 }
 
 #generate-btn:active {
   transform: scale(0.97);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 #canvas {
