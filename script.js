@@ -1,10 +1,15 @@
-const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const DIGITS = '0123456789';
 
 function randomName() {
-  const length = Math.floor(Math.random() * 4) + 4; // 4–7 chars including leading N
   let name = 'N';
-  for (let i = 1; i < length; i++) {
-    name += CHARS[Math.floor(Math.random() * CHARS.length)];
+  const numCount = Math.floor(Math.random() * 2) + 2;
+  for (let i = 0; i < numCount; i++) {
+    name += DIGITS[Math.floor(Math.random() * DIGITS.length)];
+  }
+  const letCount = Math.floor(Math.random() * 2) + 1;
+  for (let i = 0; i < letCount; i++) {
+    name += LETTERS[Math.floor(Math.random() * LETTERS.length)];
   }
   return name;
 }
