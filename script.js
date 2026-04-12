@@ -13,6 +13,7 @@ let wallsWidth = 0;
 let wallsHeight = 0;
 
 const MAX_ATTEMPTS = 500;
+const RAY_COUNT = 360;
 const LINE_MIN_PX = 75;
 const LINE_MAX_PX = 150;
 
@@ -35,51 +36,49 @@ function loadImage(src, canvasId) {
   });
 }
 
-// Sample mask.png — white pixel = allowed zone
 function isAllowedPx(px, py) {
   if (!maskCtx) return true;
   if (px < 0 || py < 0 || px >= maskWidth || py >= maskHeight) return false;
   return maskCtx.getImageData(px, py, 1, 1).data[0] > 128;
 }
 
-// Convert image coords (0–IMG_W/H) to mask pixel and check
 function isAllowed(ix, iy) {
   const px = Math.floor((ix / IMG_W) * maskWidth);
   const py = Math.floor((iy / IMG_H) * maskHeight);
   return isAllowedPx(px, py);
 }
 
-// Sample walls.png — white pixel = wall
-function isWallPx(px, py) {
+function isWall(ix, iy) {
   if (!wallsCtx) return false;
+  const px = Math.floor((ix / IMG_W) * wallsWidth);
+  const py = Math.floor((iy / IMG_H) * wallsHeight);
   if (px < 0 || py < 0 || px >= wallsWidth || py >= wallsHeight) return false;
   return wallsCtx.getImageData(px, py, 1, 1).data[0] > 128;
 }
 
-function isWall(ix, iy) {
-  const px = Math.floor((ix / IMG_W) * wallsWidth);
-  const py = Math.floor((iy / IMG_H) * wallsHeight);
-  return isWallPx(px, py);
-}
-
-// Cast a ray from image-pixel (startX, startY) in direction (dx, dy).
-// Stops at a wall or at a random length between LINE_MIN_PX and LINE_MAX_PX.
+// Cast one ray, return distance to first wall hit (or Infinity if none within LINE_MAX_PX)
 function castRay(startX, startY, dx, dy) {
-  const targetLen = LINE_MIN_PX + Math.random() * (LINE_MAX_PX - LINE_MIN_PX);
-
   for (let step = 1; step <= LINE_MAX_PX; step++) {
     const x = startX + dx * step;
     const y = startY + dy * step;
-
-    if (isWall(x, y) || step >= targetLen) {
-      return { x, y };
+    if (isWall(x, y)) {
+      return { dist: step, endX: x, endY: y };
     }
   }
+  return null; // no wall found within range
+}
 
-  return {
-    x: startX + dx * LINE_MAX_PX,
-    y: startY + dy * LINE_MAX_PX
-  };
+// Fire RAY_COUNT rays, return the closest wall hit — or null if none in range
+function findClosestWall(startX, startY) {
+  let best = null;
+  for (let i = 0; i < RAY_COUNT; i++) {
+    const angle = (i / RAY_COUNT) * 2 * Math.PI;
+    const hit = castRay(startX, startY, Math.cos(angle), Math.sin(angle));
+    if (hit && (!best || hit.dist < best.dist)) {
+      best = hit;
+    }
+  }
+  return best; // null if no wall found in any direction within LINE_MAX_PX
 }
 
 function randomName() {
@@ -95,7 +94,6 @@ function randomName() {
   return name;
 }
 
-// Returns position in image pixels (0–IMG_W, 0–IMG_H)
 function randomPosition() {
   const margin = Math.floor(IMG_W * 0.02);
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
@@ -128,26 +126,39 @@ function generate() {
   const existing = canvas.querySelector('.dot-group');
   if (existing) existing.remove();
 
-  const { x, y } = randomPosition();
-  const name = randomName();
+  // Keep trying new positions until we find one whose closest wall
+  // is between LINE_MIN_PX and LINE_MAX_PX away
+  let pos, wall;
+  let tries = 0;
+  while (tries < MAX_ATTEMPTS) {
+    pos = randomPosition();
+    wall = findClosestWall(pos.x, pos.y);
 
-  // Pick a random direction and cast ray
-  const angle = Math.random() * 2 * Math.PI;
-  const end = castRay(x, y, Math.cos(angle), Math.sin(angle));
-  drawLine(x, y, end.x, end.y);
+    if (wall && wall.dist >= LINE_MIN_PX && wall.dist <= LINE_MAX_PX) {
+      break; // valid spot found
+    }
+    wall = null;
+    tries++;
+  }
 
-  // Position dot using image-pixel coords as percentages of the fixed canvas
+  if (!wall) {
+    console.warn('Could not find a position with a wall in the valid range.');
+    return;
+  }
+
+  drawLine(pos.x, pos.y, wall.endX, wall.endY);
+
   const group = document.createElement('div');
   group.className = 'dot-group';
-  group.style.left = x + 'px';
-  group.style.top = y + 'px';
+  group.style.left = pos.x + 'px';
+  group.style.top = pos.y + 'px';
 
   const dot = document.createElement('div');
   dot.className = 'dot';
 
   const label = document.createElement('span');
   label.className = 'dot-label';
-  label.textContent = name;
+  label.textContent = randomName();
 
   group.appendChild(dot);
   group.appendChild(label);
