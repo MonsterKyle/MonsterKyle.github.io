@@ -1,0 +1,76 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-image: url('background.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  font-family: sans-serif;
+}
+
+#generate-btn {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 100;
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.2s, transform 0.1s;
+  letter-spacing: 0.03em;
+}
+
+#generate-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+#generate-btn:active {
+  transform: scale(0.97);
+}
+
+#canvas {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+.dot-group {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translate(-50%, -50%);
+}
+
+.dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #FFE033;
+  box-shadow: 0 0 10px 3px rgba(255, 220, 0, 0.55);
+  flex-shrink: 0;
+}
+
+.dot-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow:
+    0 1px 4px rgba(0,0,0,0.7),
+    0 0 8px rgba(0,0,0,0.5);
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
