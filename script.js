@@ -12,6 +12,10 @@ let wallsCtx = null, wallsWidth = 0, wallsHeight = 0;
 let maskKgwoCtx = null, maskKgwoWidth = 0, maskKgwoHeight = 0;
 let wallsKgwoCtx = null, wallsKgwoWidth = 0, wallsKgwoHeight = 0;
 
+// 0M8 masks
+let maskOm8Ctx = null, maskOm8Width = 0, maskOm8Height = 0;
+let wallsOm8Ctx = null, wallsOm8Width = 0, wallsOm8Height = 0;
+
 const MAX_ATTEMPTS = 500;
 const RAY_COUNT = 360;
 const LINE_MIN_PX = 75;
@@ -42,17 +46,31 @@ function isKgwo() {
   return document.getElementById('kgwo-checkbox').checked;
 }
 
+function isOm8() {
+  return document.getElementById('om8-checkbox').checked;
+}
+
+// Ensure only one checkbox is checked at a time
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('kgwo-checkbox').addEventListener('change', () => {
+    if (isKgwo()) document.getElementById('om8-checkbox').checked = false;
+  });
+  document.getElementById('om8-checkbox').addEventListener('change', () => {
+    if (isOm8()) document.getElementById('kgwo-checkbox').checked = false;
+  });
+});
+
 // Pick the active mask/walls context based on checkbox state
 function activeMask() {
-  return isKgwo()
-    ? { ctx: maskKgwoCtx, w: maskKgwoWidth, h: maskKgwoHeight }
-    : { ctx: maskCtx,     w: maskWidth,     h: maskHeight     };
+  if (isKgwo()) return { ctx: maskKgwoCtx, w: maskKgwoWidth, h: maskKgwoHeight };
+  if (isOm8())  return { ctx: maskOm8Ctx,  w: maskOm8Width,  h: maskOm8Height  };
+  return { ctx: maskCtx, w: maskWidth, h: maskHeight };
 }
 
 function activeWalls() {
-  return isKgwo()
-    ? { ctx: wallsKgwoCtx, w: wallsKgwoWidth, h: wallsKgwoHeight }
-    : { ctx: wallsCtx,     w: wallsWidth,     h: wallsHeight     };
+  if (isKgwo()) return { ctx: wallsKgwoCtx, w: wallsKgwoWidth, h: wallsKgwoHeight };
+  if (isOm8())  return { ctx: wallsOm8Ctx,  w: wallsOm8Width,  h: wallsOm8Height  };
+  return { ctx: wallsCtx, w: wallsWidth, h: wallsHeight };
 }
 
 function isAllowed(ix, iy) {
@@ -148,8 +166,8 @@ function generate() {
   let pos, wall;
   let tries = 0;
 
-  if (isKgwo()) {
-    // In KGWO mode: just find any valid position with any wall, no distance limits
+  if (isKgwo() || isOm8()) {
+    // KGWO and 0M8 mode: no distance limits
     while (tries < MAX_ATTEMPTS) {
       pos = randomPosition();
       wall = findClosestWall(pos.x, pos.y);
@@ -157,7 +175,7 @@ function generate() {
       tries++;
     }
   } else {
-    // Default mode: closest wall must be between LINE_MIN_PX and LINE_MAX_PX
+    // Default and 0M8 mode: closest wall must be between LINE_MIN_PX and LINE_MAX_PX
     while (tries < MAX_ATTEMPTS) {
       pos = randomPosition();
       wall = findClosestWall(pos.x, pos.y);
@@ -227,6 +245,20 @@ async function init() {
     wallsKgwoCtx = wallsKgwoResult.ctx;
     wallsKgwoWidth = wallsKgwoResult.width;
     wallsKgwoHeight = wallsKgwoResult.height;
+  }
+
+  const maskOm8Result = await loadImage('mask_om8.png', 'mask-om8-canvas');
+  if (maskOm8Result) {
+    maskOm8Ctx = maskOm8Result.ctx;
+    maskOm8Width = maskOm8Result.width;
+    maskOm8Height = maskOm8Result.height;
+  }
+
+  const wallsOm8Result = await loadImage('walls_om8.png', 'walls-om8-canvas');
+  if (wallsOm8Result) {
+    wallsOm8Ctx = wallsOm8Result.ctx;
+    wallsOm8Width = wallsOm8Result.width;
+    wallsOm8Height = wallsOm8Result.height;
   }
 
   generate();
