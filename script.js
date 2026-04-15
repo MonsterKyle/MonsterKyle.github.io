@@ -42,39 +42,50 @@ function loadImage(src, canvasId) {
   });
 }
 
-function isKgwo() {
-  return document.getElementById('kgwo-checkbox').checked;
-}
+function isKgwo() { return document.getElementById('kgwo-checkbox').checked; }
+function isOm8()  { return document.getElementById('om8-checkbox').checked; }
+function isEverything() { return document.getElementById('everything-checkbox').checked; }
 
-function isOm8() {
-  return document.getElementById('om8-checkbox').checked;
-}
-
-// Ensure only one checkbox is checked at a time
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('kgwo-checkbox').addEventListener('change', () => {
-    if (isKgwo()) document.getElementById('om8-checkbox').checked = false;
-  });
-  document.getElementById('om8-checkbox').addEventListener('change', () => {
-    if (isOm8()) document.getElementById('kgwo-checkbox').checked = false;
+// Mutually exclusive checkboxes — checking any one unchecks the others
+const CHECKBOX_IDS = ['kgwo-checkbox', 'om8-checkbox', 'everything-checkbox'];
+CHECKBOX_IDS.forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    if (document.getElementById(id).checked) {
+      CHECKBOX_IDS.filter(b => b !== id).forEach(b => {
+        document.getElementById(b).checked = false;
+      });
+    }
   });
 });
 
-// Pick the active mask/walls context based on checkbox state
-function activeMask() {
-  if (isKgwo()) return { ctx: maskKgwoCtx, w: maskKgwoWidth, h: maskKgwoHeight };
-  if (isOm8())  return { ctx: maskOm8Ctx,  w: maskOm8Width,  h: maskOm8Height  };
+// Pick the active mask/walls context based on active mode
+function activeMask(mode) {
+  if (mode === 'kgwo') return { ctx: maskKgwoCtx, w: maskKgwoWidth, h: maskKgwoHeight };
+  if (mode === 'om8')  return { ctx: maskOm8Ctx,  w: maskOm8Width,  h: maskOm8Height  };
   return { ctx: maskCtx, w: maskWidth, h: maskHeight };
 }
 
-function activeWalls() {
-  if (isKgwo()) return { ctx: wallsKgwoCtx, w: wallsKgwoWidth, h: wallsKgwoHeight };
-  if (isOm8())  return { ctx: wallsOm8Ctx,  w: wallsOm8Width,  h: wallsOm8Height  };
+function activeWalls(mode) {
+  if (mode === 'kgwo') return { ctx: wallsKgwoCtx, w: wallsKgwoWidth, h: wallsKgwoHeight };
+  if (mode === 'om8')  return { ctx: wallsOm8Ctx,  w: wallsOm8Width,  h: wallsOm8Height  };
   return { ctx: wallsCtx, w: wallsWidth, h: wallsHeight };
 }
 
-function isAllowed(ix, iy) {
-  const { ctx, w, h } = activeMask();
+// Determine which mode is active, respecting "everything" bias (60% default, 20% om8, 20% kgwo)
+function getMode() {
+  if (isEverything()) {
+    const r = Math.random();
+    if (r < 0.6) return 'default';
+    if (r < 0.8) return 'om8';
+    return 'kgwo';
+  }
+  if (isKgwo()) return 'kgwo';
+  if (isOm8())  return 'om8';
+  return 'default';
+}
+
+function isAllowedForMode(ix, iy, mode) {
+  const { ctx, w, h } = activeMask(mode);
   if (!ctx) return true;
   const px = Math.floor((ix / IMG_W) * w);
   const py = Math.floor((iy / IMG_H) * h);
@@ -82,8 +93,8 @@ function isAllowed(ix, iy) {
   return ctx.getImageData(px, py, 1, 1).data[0] > 128;
 }
 
-function isWall(ix, iy) {
-  const { ctx, w, h } = activeWalls();
+function isWallForMode(ix, iy, mode) {
+  const { ctx, w, h } = activeWalls(mode);
   if (!ctx) return false;
   const px = Math.floor((ix / IMG_W) * w);
   const py = Math.floor((iy / IMG_H) * h);
@@ -91,23 +102,25 @@ function isWall(ix, iy) {
   return ctx.getImageData(px, py, 1, 1).data[0] > 128;
 }
 
-function castRay(startX, startY, dx, dy) {
+// Cast one ray in a given direction, searching the full image distance
+function castRay(startX, startY, dx, dy, mode) {
   const maxSteps = Math.max(IMG_W, IMG_H);
   for (let step = 1; step <= maxSteps; step++) {
     const x = startX + dx * step;
     const y = startY + dy * step;
-    if (isWall(x, y)) {
+    if (isWallForMode(x, y, mode)) {
       return { dist: step, endX: x, endY: y };
     }
   }
   return null;
 }
 
-function findClosestWall(startX, startY) {
+// Find closest wall — used for default mode (75–150px enforcement)
+function findClosestWall(startX, startY, mode) {
   let best = null;
   for (let i = 0; i < RAY_COUNT; i++) {
     const angle = (i / RAY_COUNT) * 2 * Math.PI;
-    const hit = castRay(startX, startY, Math.cos(angle), Math.sin(angle));
+    const hit = castRay(startX, startY, Math.cos(angle), Math.sin(angle), mode);
     if (hit && (!best || hit.dist < best.dist)) {
       best = hit;
     }
@@ -115,16 +128,18 @@ function findClosestWall(startX, startY) {
   return best;
 }
 
+// Find wall in a random direction — used for no-limit modes so distance is unconstrained
+function findRandomDirectionWall(startX, startY, mode) {
+  const angle = Math.random() * 2 * Math.PI;
+  return castRay(startX, startY, Math.cos(angle), Math.sin(angle), mode);
+}
+
 function randomName() {
   let name = 'N';
   const numCount = Math.floor(Math.random() * 2) + 2;
-  for (let i = 0; i < numCount; i++) {
-    name += DIGITS[Math.floor(Math.random() * DIGITS.length)];
-  }
+  for (let i = 0; i < numCount; i++) name += DIGITS[Math.floor(Math.random() * DIGITS.length)];
   const letCount = Math.floor(Math.random() * 2) + 1;
-  for (let i = 0; i < letCount; i++) {
-    name += LETTERS[Math.floor(Math.random() * LETTERS.length)];
-  }
+  for (let i = 0; i < letCount; i++) name += LETTERS[Math.floor(Math.random() * LETTERS.length)];
   return name;
 }
 
@@ -132,12 +147,12 @@ function randomSublabel() {
   return SUBLABELS[Math.floor(Math.random() * SUBLABELS.length)];
 }
 
-function randomPosition() {
+function randomPosition(mode) {
   const margin = Math.floor(IMG_W * 0.02);
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     const x = margin + Math.random() * (IMG_W - margin * 2);
     const y = margin + Math.random() * (IMG_H - margin * 2);
-    if (isAllowed(x, y)) return { x, y };
+    if (isAllowedForMode(x, y, mode)) return { x, y };
   }
   console.warn('Could not find a valid position — placing at center.');
   return { x: IMG_W / 2, y: IMG_H / 2 };
@@ -160,26 +175,26 @@ function drawLine(startX, startY, endX, endY) {
 
 function generate() {
   const canvas = document.getElementById('canvas');
-
   const existing = canvas.querySelector('.dot-group');
   if (existing) existing.remove();
 
+  const mode = getMode();
   let pos, wall;
   let tries = 0;
 
-  if (isKgwo() || isOm8()) {
-    // KGWO and 0M8 mode: no distance limits
+  if (mode === 'kgwo' || mode === 'om8') {
+    // No distance limits — random direction, any wall distance
     while (tries < MAX_ATTEMPTS) {
-      pos = randomPosition();
-      wall = findClosestWall(pos.x, pos.y);
+      pos = randomPosition(mode);
+      wall = findRandomDirectionWall(pos.x, pos.y, mode);
       if (wall) break;
       tries++;
     }
   } else {
-    // Default and 0M8 mode: closest wall must be between LINE_MIN_PX and LINE_MAX_PX
+    // Default mode: closest wall must be between LINE_MIN_PX and LINE_MAX_PX
     while (tries < MAX_ATTEMPTS) {
-      pos = randomPosition();
-      wall = findClosestWall(pos.x, pos.y);
+      pos = randomPosition(mode);
+      wall = findClosestWall(pos.x, pos.y, mode);
       if (wall && wall.dist >= LINE_MIN_PX && wall.dist <= LINE_MAX_PX) break;
       wall = null;
       tries++;
@@ -208,11 +223,21 @@ function generate() {
   group.appendChild(dot);
   group.appendChild(label);
 
-  // Add sublabel only when KGWO is checked
-  if (isKgwo()) {
-    const sublabel = document.createElement('span');
-    sublabel.className = 'dot-sublabel';
+  // Sublabel line beneath the name — content depends on mode
+  const sublabel = document.createElement('span');
+  sublabel.className = 'dot-sublabel';
+  if (mode === 'kgwo') {
     sublabel.textContent = randomSublabel();
+    group.appendChild(sublabel);
+    const sublabel2 = document.createElement('span');
+    sublabel2.className = 'dot-sublabel2';
+    sublabel2.textContent = 'KGWO';
+    group.appendChild(sublabel2);
+  } else if (mode === 'om8') {
+    sublabel.textContent = '0M8';
+    group.appendChild(sublabel);
+  } else {
+    sublabel.textContent = 'KXXX';
     group.appendChild(sublabel);
   }
 
@@ -221,46 +246,22 @@ function generate() {
 
 async function init() {
   const maskResult = await loadImage('mask.png', 'mask-canvas');
-  if (maskResult) {
-    maskCtx = maskResult.ctx;
-    maskWidth = maskResult.width;
-    maskHeight = maskResult.height;
-  }
+  if (maskResult) { maskCtx = maskResult.ctx; maskWidth = maskResult.width; maskHeight = maskResult.height; }
 
   const wallsResult = await loadImage('walls.png', 'walls-canvas');
-  if (wallsResult) {
-    wallsCtx = wallsResult.ctx;
-    wallsWidth = wallsResult.width;
-    wallsHeight = wallsResult.height;
-  }
+  if (wallsResult) { wallsCtx = wallsResult.ctx; wallsWidth = wallsResult.width; wallsHeight = wallsResult.height; }
 
   const maskKgwoResult = await loadImage('mask_kgwo.png', 'mask-kgwo-canvas');
-  if (maskKgwoResult) {
-    maskKgwoCtx = maskKgwoResult.ctx;
-    maskKgwoWidth = maskKgwoResult.width;
-    maskKgwoHeight = maskKgwoResult.height;
-  }
+  if (maskKgwoResult) { maskKgwoCtx = maskKgwoResult.ctx; maskKgwoWidth = maskKgwoResult.width; maskKgwoHeight = maskKgwoResult.height; }
 
   const wallsKgwoResult = await loadImage('walls_kgwo.png', 'walls-kgwo-canvas');
-  if (wallsKgwoResult) {
-    wallsKgwoCtx = wallsKgwoResult.ctx;
-    wallsKgwoWidth = wallsKgwoResult.width;
-    wallsKgwoHeight = wallsKgwoResult.height;
-  }
+  if (wallsKgwoResult) { wallsKgwoCtx = wallsKgwoResult.ctx; wallsKgwoWidth = wallsKgwoResult.width; wallsKgwoHeight = wallsKgwoResult.height; }
 
   const maskOm8Result = await loadImage('mask_om8.png', 'mask-om8-canvas');
-  if (maskOm8Result) {
-    maskOm8Ctx = maskOm8Result.ctx;
-    maskOm8Width = maskOm8Result.width;
-    maskOm8Height = maskOm8Result.height;
-  }
+  if (maskOm8Result) { maskOm8Ctx = maskOm8Result.ctx; maskOm8Width = maskOm8Result.width; maskOm8Height = maskOm8Result.height; }
 
   const wallsOm8Result = await loadImage('walls_om8.png', 'walls-om8-canvas');
-  if (wallsOm8Result) {
-    wallsOm8Ctx = wallsOm8Result.ctx;
-    wallsOm8Width = wallsOm8Result.width;
-    wallsOm8Height = wallsOm8Result.height;
-  }
+  if (wallsOm8Result) { wallsOm8Ctx = wallsOm8Result.ctx; wallsOm8Width = wallsOm8Result.width; wallsOm8Height = wallsOm8Result.height; }
 
   generate();
 }
