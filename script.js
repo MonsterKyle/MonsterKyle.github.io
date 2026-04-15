@@ -4,18 +4,20 @@ const DIGITS = '0123456789';
 const IMG_W = 1078;
 const IMG_H = 908;
 
-let maskCtx = null;
-let maskWidth = 0;
-let maskHeight = 0;
+// Default masks
+let maskCtx = null, maskWidth = 0, maskHeight = 0;
+let wallsCtx = null, wallsWidth = 0, wallsHeight = 0;
 
-let wallsCtx = null;
-let wallsWidth = 0;
-let wallsHeight = 0;
+// KGWO masks
+let maskKgwoCtx = null, maskKgwoWidth = 0, maskKgwoHeight = 0;
+let wallsKgwoCtx = null, wallsKgwoWidth = 0, wallsKgwoHeight = 0;
 
 const MAX_ATTEMPTS = 500;
 const RAY_COUNT = 360;
 const LINE_MIN_PX = 75;
 const LINE_MAX_PX = 150;
+
+const SUBLABELS = ['VA', 'RWY5', 'VA RWY5'];
 
 function loadImage(src, canvasId) {
   return new Promise((resolve) => {
@@ -36,27 +38,41 @@ function loadImage(src, canvasId) {
   });
 }
 
-function isAllowedPx(px, py) {
-  if (!maskCtx) return true;
-  if (px < 0 || py < 0 || px >= maskWidth || py >= maskHeight) return false;
-  return maskCtx.getImageData(px, py, 1, 1).data[0] > 128;
+function isKgwo() {
+  return document.getElementById('kgwo-checkbox').checked;
+}
+
+// Pick the active mask/walls context based on checkbox state
+function activeMask() {
+  return isKgwo()
+    ? { ctx: maskKgwoCtx, w: maskKgwoWidth, h: maskKgwoHeight }
+    : { ctx: maskCtx,     w: maskWidth,     h: maskHeight     };
+}
+
+function activeWalls() {
+  return isKgwo()
+    ? { ctx: wallsKgwoCtx, w: wallsKgwoWidth, h: wallsKgwoHeight }
+    : { ctx: wallsCtx,     w: wallsWidth,     h: wallsHeight     };
 }
 
 function isAllowed(ix, iy) {
-  const px = Math.floor((ix / IMG_W) * maskWidth);
-  const py = Math.floor((iy / IMG_H) * maskHeight);
-  return isAllowedPx(px, py);
+  const { ctx, w, h } = activeMask();
+  if (!ctx) return true;
+  const px = Math.floor((ix / IMG_W) * w);
+  const py = Math.floor((iy / IMG_H) * h);
+  if (px < 0 || py < 0 || px >= w || py >= h) return false;
+  return ctx.getImageData(px, py, 1, 1).data[0] > 128;
 }
 
 function isWall(ix, iy) {
-  if (!wallsCtx) return false;
-  const px = Math.floor((ix / IMG_W) * wallsWidth);
-  const py = Math.floor((iy / IMG_H) * wallsHeight);
-  if (px < 0 || py < 0 || px >= wallsWidth || py >= wallsHeight) return false;
-  return wallsCtx.getImageData(px, py, 1, 1).data[0] > 128;
+  const { ctx, w, h } = activeWalls();
+  if (!ctx) return false;
+  const px = Math.floor((ix / IMG_W) * w);
+  const py = Math.floor((iy / IMG_H) * h);
+  if (px < 0 || py < 0 || px >= w || py >= h) return false;
+  return ctx.getImageData(px, py, 1, 1).data[0] > 128;
 }
 
-// Cast one ray, return distance to first wall hit (or Infinity if none within LINE_MAX_PX)
 function castRay(startX, startY, dx, dy) {
   for (let step = 1; step <= LINE_MAX_PX; step++) {
     const x = startX + dx * step;
@@ -65,10 +81,9 @@ function castRay(startX, startY, dx, dy) {
       return { dist: step, endX: x, endY: y };
     }
   }
-  return null; // no wall found within range
+  return null;
 }
 
-// Fire RAY_COUNT rays, return the closest wall hit — or null if none in range
 function findClosestWall(startX, startY) {
   let best = null;
   for (let i = 0; i < RAY_COUNT; i++) {
@@ -78,7 +93,7 @@ function findClosestWall(startX, startY) {
       best = hit;
     }
   }
-  return best; // null if no wall found in any direction within LINE_MAX_PX
+  return best;
 }
 
 function randomName() {
@@ -92,6 +107,10 @@ function randomName() {
     name += LETTERS[Math.floor(Math.random() * LETTERS.length)];
   }
   return name;
+}
+
+function randomSublabel() {
+  return SUBLABELS[Math.floor(Math.random() * SUBLABELS.length)];
 }
 
 function randomPosition() {
@@ -126,17 +145,12 @@ function generate() {
   const existing = canvas.querySelector('.dot-group');
   if (existing) existing.remove();
 
-  // Keep trying new positions until we find one whose closest wall
-  // is between LINE_MIN_PX and LINE_MAX_PX away
   let pos, wall;
   let tries = 0;
   while (tries < MAX_ATTEMPTS) {
     pos = randomPosition();
     wall = findClosestWall(pos.x, pos.y);
-
-    if (wall && wall.dist >= LINE_MIN_PX && wall.dist <= LINE_MAX_PX) {
-      break; // valid spot found
-    }
+    if (wall && wall.dist >= LINE_MIN_PX && wall.dist <= LINE_MAX_PX) break;
     wall = null;
     tries++;
   }
@@ -162,6 +176,15 @@ function generate() {
 
   group.appendChild(dot);
   group.appendChild(label);
+
+  // Add sublabel only when KGWO is checked
+  if (isKgwo()) {
+    const sublabel = document.createElement('span');
+    sublabel.className = 'dot-sublabel';
+    sublabel.textContent = randomSublabel();
+    group.appendChild(sublabel);
+  }
+
   canvas.appendChild(group);
 }
 
@@ -178,6 +201,20 @@ async function init() {
     wallsCtx = wallsResult.ctx;
     wallsWidth = wallsResult.width;
     wallsHeight = wallsResult.height;
+  }
+
+  const maskKgwoResult = await loadImage('mask_kgwo.png', 'mask-kgwo-canvas');
+  if (maskKgwoResult) {
+    maskKgwoCtx = maskKgwoResult.ctx;
+    maskKgwoWidth = maskKgwoResult.width;
+    maskKgwoHeight = maskKgwoResult.height;
+  }
+
+  const wallsKgwoResult = await loadImage('walls_kgwo.png', 'walls-kgwo-canvas');
+  if (wallsKgwoResult) {
+    wallsKgwoCtx = wallsKgwoResult.ctx;
+    wallsKgwoWidth = wallsKgwoResult.width;
+    wallsKgwoHeight = wallsKgwoResult.height;
   }
 
   generate();
