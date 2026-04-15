@@ -65,7 +65,8 @@ html {
 }
 
 #kgwo-label,
-#om8-label {
+#om8-label,
+#everything-label {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -79,7 +80,8 @@ html {
 }
 
 #kgwo-checkbox,
-#om8-checkbox {
+#om8-checkbox,
+#everything-checkbox {
   width: 17px;
   height: 17px;
   cursor: pointer;
