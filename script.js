@@ -16,10 +16,15 @@ let wallsKgwoCtx = null, wallsKgwoWidth = 0, wallsKgwoHeight = 0;
 let maskOm8Ctx = null, maskOm8Width = 0, maskOm8Height = 0;
 let wallsOm8Ctx = null, wallsOm8Width = 0, wallsOm8Height = 0;
 
+// TRAFFIC mask (no walls)
+let maskTrafficCtx = null, maskTrafficWidth = 0, maskTrafficHeight = 0;
+
 const MAX_ATTEMPTS = 500;
 const RAY_COUNT = 360;
 const LINE_MIN_PX = 75;
 const LINE_MAX_PX = 150;
+const TRAFFIC_MIN_DIST = 100;
+const TRAFFIC_MAX_DIST = 300;
 
 const SUBLABELS = ['VA', 'RWY5', 'VA RWY5'];
 
@@ -42,12 +47,13 @@ function loadImage(src, canvasId) {
   });
 }
 
-function isKgwo() { return document.getElementById('kgwo-checkbox').checked; }
-function isOm8()  { return document.getElementById('om8-checkbox').checked; }
+function isKgwo()       { return document.getElementById('kgwo-checkbox').checked; }
+function isOm8()        { return document.getElementById('om8-checkbox').checked; }
 function isEverything() { return document.getElementById('everything-checkbox').checked; }
+function isTraffic()    { return document.getElementById('traffic-checkbox').checked; }
 
-// Mutually exclusive checkboxes — checking any one unchecks the others
-const CHECKBOX_IDS = ['kgwo-checkbox', 'om8-checkbox', 'everything-checkbox'];
+// Mutually exclusive checkboxes
+const CHECKBOX_IDS = ['kgwo-checkbox', 'om8-checkbox', 'everything-checkbox', 'traffic-checkbox'];
 CHECKBOX_IDS.forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
     if (document.getElementById(id).checked) {
@@ -71,16 +77,19 @@ function activeWalls(mode) {
   return { ctx: wallsCtx, w: wallsWidth, h: wallsHeight };
 }
 
-// Determine which mode is active, respecting "everything" bias (60% default, 20% om8, 20% kgwo)
+// Determine which mode is active
+// Everything bias: 40% default, 20% om8, 20% kgwo, 20% traffic
 function getMode() {
   if (isEverything()) {
     const r = Math.random();
-    if (r < 0.6) return 'default';
-    if (r < 0.8) return 'om8';
-    return 'kgwo';
+    if (r < 0.40) return 'default';
+    if (r < 0.60) return 'om8';
+    if (r < 0.80) return 'kgwo';
+    return 'traffic';
   }
-  if (isKgwo()) return 'kgwo';
-  if (isOm8())  return 'om8';
+  if (isKgwo())    return 'kgwo';
+  if (isOm8())     return 'om8';
+  if (isTraffic()) return 'traffic';
   return 'default';
 }
 
@@ -93,6 +102,14 @@ function isAllowedForMode(ix, iy, mode) {
   return ctx.getImageData(px, py, 1, 1).data[0] > 128;
 }
 
+function isAllowedTraffic(ix, iy) {
+  if (!maskTrafficCtx) return true;
+  const px = Math.floor((ix / IMG_W) * maskTrafficWidth);
+  const py = Math.floor((iy / IMG_H) * maskTrafficHeight);
+  if (px < 0 || py < 0 || px >= maskTrafficWidth || py >= maskTrafficHeight) return false;
+  return maskTrafficCtx.getImageData(px, py, 1, 1).data[0] > 128;
+}
+
 function isWallForMode(ix, iy, mode) {
   const { ctx, w, h } = activeWalls(mode);
   if (!ctx) return false;
@@ -102,7 +119,6 @@ function isWallForMode(ix, iy, mode) {
   return ctx.getImageData(px, py, 1, 1).data[0] > 128;
 }
 
-// Cast one ray in a given direction, searching the full image distance
 function castRay(startX, startY, dx, dy, mode) {
   const maxSteps = Math.max(IMG_W, IMG_H);
   for (let step = 1; step <= maxSteps; step++) {
@@ -115,20 +131,16 @@ function castRay(startX, startY, dx, dy, mode) {
   return null;
 }
 
-// Find closest wall — used for default mode (75–150px enforcement)
 function findClosestWall(startX, startY, mode) {
   let best = null;
   for (let i = 0; i < RAY_COUNT; i++) {
     const angle = (i / RAY_COUNT) * 2 * Math.PI;
     const hit = castRay(startX, startY, Math.cos(angle), Math.sin(angle), mode);
-    if (hit && (!best || hit.dist < best.dist)) {
-      best = hit;
-    }
+    if (hit && (!best || hit.dist < best.dist)) best = hit;
   }
   return best;
 }
 
-// Find wall in a random direction — used for no-limit modes so distance is unconstrained
 function findRandomDirectionWall(startX, startY, mode) {
   const angle = Math.random() * 2 * Math.PI;
   return castRay(startX, startY, Math.cos(angle), Math.sin(angle), mode);
@@ -158,90 +170,194 @@ function randomPosition(mode) {
   return { x: IMG_W / 2, y: IMG_H / 2 };
 }
 
-function drawLine(startX, startY, endX, endY) {
-  const svg = document.getElementById('line-overlay');
-  while (svg.firstChild) svg.removeChild(svg.firstChild);
+// Find a position for the traffic dot by sampling radially from dot1
+function findTrafficPosition(dot1X, dot1Y) {
+  const useTrafficMask = maskTrafficCtx !== null;
 
+  for (let i = 0; i < MAX_ATTEMPTS * 4; i++) {
+    const angle = Math.random() * 2 * Math.PI;
+    const dist = TRAFFIC_MIN_DIST + Math.random() * (TRAFFIC_MAX_DIST - TRAFFIC_MIN_DIST);
+    const x = dot1X + Math.cos(angle) * dist;
+    const y = dot1Y + Math.sin(angle) * dist;
+
+    if (x < 0 || y < 0 || x >= IMG_W || y >= IMG_H) continue;
+
+    // Use traffic mask if loaded, otherwise fall back to default mask
+    const allowed = useTrafficMask
+      ? isAllowedTraffic(x, y)
+      : isAllowedForMode(x, y, 'default');
+
+    if (allowed) return { x, y };
+  }
+
+  // Last resort: return any point at valid distance ignoring mask
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    const angle = Math.random() * 2 * Math.PI;
+    const dist = TRAFFIC_MIN_DIST + Math.random() * (TRAFFIC_MAX_DIST - TRAFFIC_MIN_DIST);
+    const x = dot1X + Math.cos(angle) * dist;
+    const y = dot1Y + Math.sin(angle) * dist;
+    if (x >= 0 && y >= 0 && x < IMG_W && y < IMG_H) return { x, y };
+  }
+
+  return null;
+}
+
+// Compute the traffic dot's line endpoint:
+// direction = from traffic dot toward midpoint of first dot's line
+// length = random 75–150px
+function trafficLineEnd(dot2X, dot2Y, line1MidX, line1MidY) {
+  const dx = line1MidX - dot2X;
+  const dy = line1MidY - dot2Y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len === 0) return { endX: dot2X + LINE_MIN_PX, endY: dot2Y };
+
+  const normX = dx / len;
+  const normY = dy / len;
+  const lineLen = LINE_MIN_PX + Math.random() * (LINE_MAX_PX - LINE_MIN_PX);
+
+  return {
+    endX: dot2X + normX * lineLen,
+    endY: dot2Y + normY * lineLen
+  };
+}
+
+function addLineToSVG(svg, x1, y1, x2, y2) {
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', startX);
-  line.setAttribute('y1', startY);
-  line.setAttribute('x2', endX);
-  line.setAttribute('y2', endY);
+  line.setAttribute('x1', x1);
+  line.setAttribute('y1', y1);
+  line.setAttribute('x2', x2);
+  line.setAttribute('y2', y2);
   line.setAttribute('stroke', '#FFE033');
   line.setAttribute('stroke-width', '1.5');
   line.setAttribute('stroke-linecap', 'round');
   svg.appendChild(line);
 }
 
-function generate() {
-  const canvas = document.getElementById('canvas');
-  const existing = canvas.querySelector('.dot-group');
-  if (existing) existing.remove();
+function clearSVG() {
+  const svg = document.getElementById('line-overlay');
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  return svg;
+}
 
-  const mode = getMode();
-  let pos, wall;
-  let tries = 0;
-
-  if (mode === 'kgwo' || mode === 'om8') {
-    // No distance limits — random direction, any wall distance
-    while (tries < MAX_ATTEMPTS) {
-      pos = randomPosition(mode);
-      wall = findRandomDirectionWall(pos.x, pos.y, mode);
-      if (wall) break;
-      tries++;
-    }
-  } else {
-    // Default mode: closest wall must be between LINE_MIN_PX and LINE_MAX_PX
-    while (tries < MAX_ATTEMPTS) {
-      pos = randomPosition(mode);
-      wall = findClosestWall(pos.x, pos.y, mode);
-      if (wall && wall.dist >= LINE_MIN_PX && wall.dist <= LINE_MAX_PX) break;
-      wall = null;
-      tries++;
-    }
-  }
-
-  if (!wall) {
-    console.warn('Could not find a valid position.');
-    return;
-  }
-
-  drawLine(pos.x, pos.y, wall.endX, wall.endY);
-
+function makeDotGroup(x, y, name, sublabelText, sublabel2Text) {
   const group = document.createElement('div');
   group.className = 'dot-group';
-  group.style.left = pos.x + 'px';
-  group.style.top = pos.y + 'px';
+  group.style.left = x + 'px';
+  group.style.top = y + 'px';
 
   const dot = document.createElement('div');
   dot.className = 'dot';
 
   const label = document.createElement('span');
   label.className = 'dot-label';
-  label.textContent = randomName();
+  label.textContent = name;
 
   group.appendChild(dot);
   group.appendChild(label);
 
-  // Sublabel line beneath the name — content depends on mode
-  const sublabel = document.createElement('span');
-  sublabel.className = 'dot-sublabel';
-  if (mode === 'kgwo') {
-    sublabel.textContent = randomSublabel();
-    group.appendChild(sublabel);
-    const sublabel2 = document.createElement('span');
-    sublabel2.className = 'dot-sublabel2';
-    sublabel2.textContent = 'KGWO';
-    group.appendChild(sublabel2);
-  } else if (mode === 'om8') {
-    sublabel.textContent = '0M8';
-    group.appendChild(sublabel);
-  } else {
-    sublabel.textContent = 'KXXX';
+  if (sublabelText) {
+    const sublabel = document.createElement('span');
+    sublabel.className = 'dot-sublabel';
+    sublabel.textContent = sublabelText;
     group.appendChild(sublabel);
   }
 
-  canvas.appendChild(group);
+  if (sublabel2Text) {
+    const sublabel2 = document.createElement('span');
+    sublabel2.className = 'dot-sublabel2';
+    sublabel2.textContent = sublabel2Text;
+    group.appendChild(sublabel2);
+  }
+
+  return group;
+}
+
+function generate() {
+  const canvas = document.getElementById('canvas');
+
+  // Remove all existing dot groups
+  canvas.querySelectorAll('.dot-group').forEach(el => el.remove());
+
+  const svg = clearSVG();
+  const mode = getMode();
+
+  if (mode === 'traffic') {
+    // --- First dot: default mode (mask + walls, 75–150px) ---
+    let pos1, wall1;
+    let tries = 0;
+    while (tries < MAX_ATTEMPTS) {
+      pos1 = randomPosition('default');
+      wall1 = findClosestWall(pos1.x, pos1.y, 'default');
+      if (wall1 && wall1.dist >= LINE_MIN_PX && wall1.dist <= LINE_MAX_PX) break;
+      wall1 = null;
+      tries++;
+    }
+    if (!wall1) {
+      console.warn('Could not place first traffic dot.');
+      return;
+    }
+
+    // Midpoint of first dot's line
+    const mid1X = (pos1.x + wall1.endX) / 2;
+    const mid1Y = (pos1.y + wall1.endY) / 2;
+
+    // --- Second dot: traffic mask, 100–300px from dot1, line toward mid1 ---
+    const pos2 = findTrafficPosition(pos1.x, pos1.y);
+    if (!pos2) {
+      console.warn('Could not place second traffic dot.');
+      return;
+    }
+
+    const line2End = trafficLineEnd(pos2.x, pos2.y, mid1X, mid1Y);
+
+    // Draw both lines
+    addLineToSVG(svg, pos1.x, pos1.y, wall1.endX, wall1.endY);
+    addLineToSVG(svg, pos2.x, pos2.y, line2End.endX, line2End.endY);
+
+    // First dot group
+    canvas.appendChild(makeDotGroup(pos1.x, pos1.y, randomName(), 'KXXX', null));
+
+    // Second dot group
+    canvas.appendChild(makeDotGroup(pos2.x, pos2.y, randomName(), 'KXXX', null));
+
+  } else {
+    // --- Single dot modes ---
+    let pos, wall;
+    let tries = 0;
+
+    if (mode === 'kgwo' || mode === 'om8') {
+      while (tries < MAX_ATTEMPTS) {
+        pos = randomPosition(mode);
+        wall = findRandomDirectionWall(pos.x, pos.y, mode);
+        if (wall) break;
+        tries++;
+      }
+    } else {
+      while (tries < MAX_ATTEMPTS) {
+        pos = randomPosition(mode);
+        wall = findClosestWall(pos.x, pos.y, mode);
+        if (wall && wall.dist >= LINE_MIN_PX && wall.dist <= LINE_MAX_PX) break;
+        wall = null;
+        tries++;
+      }
+    }
+
+    if (!wall) { console.warn('Could not find a valid position.'); return; }
+
+    addLineToSVG(svg, pos.x, pos.y, wall.endX, wall.endY);
+
+    let sublabelText, sublabel2Text = null;
+    if (mode === 'kgwo') {
+      sublabelText = randomSublabel();
+      sublabel2Text = 'KGWO';
+    } else if (mode === 'om8') {
+      sublabelText = '0M8';
+    } else {
+      sublabelText = 'KXXX';
+    }
+
+    canvas.appendChild(makeDotGroup(pos.x, pos.y, randomName(), sublabelText, sublabel2Text));
+  }
 }
 
 async function init() {
@@ -262,6 +378,9 @@ async function init() {
 
   const wallsOm8Result = await loadImage('walls_om8.png', 'walls-om8-canvas');
   if (wallsOm8Result) { wallsOm8Ctx = wallsOm8Result.ctx; wallsOm8Width = wallsOm8Result.width; wallsOm8Height = wallsOm8Result.height; }
+
+  const maskTrafficResult = await loadImage('mask_traffic.png', 'mask-traffic-canvas');
+  if (maskTrafficResult) { maskTrafficCtx = maskTrafficResult.ctx; maskTrafficWidth = maskTrafficResult.width; maskTrafficHeight = maskTrafficResult.height; }
 
   generate();
 }
