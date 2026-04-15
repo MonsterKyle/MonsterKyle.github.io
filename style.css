@@ -10,6 +10,7 @@ body {
   overflow: visible;
   font-family: sans-serif;
   background: #000;
+  color: #fff;
 }
 
 html {
@@ -65,9 +66,7 @@ html {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
-#kgwo-label,
-#om8-label,
-#everything-label {
+#controls label {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -80,9 +79,7 @@ html {
   user-select: none;
 }
 
-#kgwo-checkbox,
-#om8-checkbox,
-#everything-checkbox {
+#controls input[type="checkbox"] {
   width: 17px;
   height: 17px;
   cursor: pointer;
