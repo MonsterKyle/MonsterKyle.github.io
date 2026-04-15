@@ -147,16 +147,28 @@ function generate() {
 
   let pos, wall;
   let tries = 0;
-  while (tries < MAX_ATTEMPTS) {
-    pos = randomPosition();
-    wall = findClosestWall(pos.x, pos.y);
-    if (wall && wall.dist >= LINE_MIN_PX && wall.dist <= LINE_MAX_PX) break;
-    wall = null;
-    tries++;
+
+  if (isKgwo()) {
+    // In KGWO mode: just find any valid position with any wall, no distance limits
+    while (tries < MAX_ATTEMPTS) {
+      pos = randomPosition();
+      wall = findClosestWall(pos.x, pos.y);
+      if (wall) break;
+      tries++;
+    }
+  } else {
+    // Default mode: closest wall must be between LINE_MIN_PX and LINE_MAX_PX
+    while (tries < MAX_ATTEMPTS) {
+      pos = randomPosition();
+      wall = findClosestWall(pos.x, pos.y);
+      if (wall && wall.dist >= LINE_MIN_PX && wall.dist <= LINE_MAX_PX) break;
+      wall = null;
+      tries++;
+    }
   }
 
   if (!wall) {
-    console.warn('Could not find a position with a wall in the valid range.');
+    console.warn('Could not find a valid position.');
     return;
   }
 
