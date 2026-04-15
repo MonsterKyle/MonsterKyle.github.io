@@ -12,7 +12,6 @@ body {
   background: #000;
 }
 
-/* Centre the fixed-size canvas on screen if viewport is larger */
 html {
   min-height: 100%;
   display: flex;
@@ -31,11 +30,17 @@ html {
   z-index: 0;
 }
 
-#generate-btn {
+#controls {
   position: absolute;
   top: 20px;
   left: 20px;
   z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+#generate-btn {
   padding: 11px 24px;
   font-size: 15px;
   font-weight: 700;
@@ -57,6 +62,26 @@ html {
 #generate-btn:active {
   transform: scale(0.97);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+#kgwo-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+#kgwo-checkbox {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: #FFE033;
 }
 
 #canvas {
@@ -95,6 +120,13 @@ html {
   left: 0;
 }
 
+.dot-group .dot-sublabel {
+  position: absolute;
+  transform: translate(16px, 50%);
+  top: 0;
+  left: 0;
+}
+
 .dot {
   width: 22px;
   height: 22px;
@@ -104,7 +136,8 @@ html {
   flex-shrink: 0;
 }
 
-.dot-label {
+.dot-label,
+.dot-sublabel {
   font-size: 15px;
   font-weight: 700;
   color: #fff;
