@@ -3,16 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pointout Practice</title>
+  <title>Yellow Dot Generator</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <img id="bg-image" src="d66.png" alt="" />
-  <button id="generate-btn" onclick="generate()">Generate</button>
+  <div id="controls">
+    <button id="generate-btn" onclick="generate()">Generate</button>
+    <label id="kgwo-label">
+      <input type="checkbox" id="kgwo-checkbox" />
+      KGWO
+    </label>
+  </div>
   <svg id="line-overlay" viewBox="0 0 1078 908" xmlns="http://www.w3.org/2000/svg"></svg>
   <div id="canvas"></div>
   <canvas id="mask-canvas" style="display:none;"></canvas>
   <canvas id="walls-canvas" style="display:none;"></canvas>
+  <canvas id="mask-kgwo-canvas" style="display:none;"></canvas>
+  <canvas id="walls-kgwo-canvas" style="display:none;"></canvas>
   <script src="script.js"></script>
 </body>
 </html>
