@@ -92,7 +92,8 @@ function isWall(ix, iy) {
 }
 
 function castRay(startX, startY, dx, dy) {
-  for (let step = 1; step <= LINE_MAX_PX; step++) {
+  const maxSteps = (isKgwo() || isOm8()) ? Math.max(IMG_W, IMG_H) : LINE_MAX_PX;
+  for (let step = 1; step <= maxSteps; step++) {
     const x = startX + dx * step;
     const y = startY + dy * step;
     if (isWall(x, y)) {
