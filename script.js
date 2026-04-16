@@ -26,7 +26,7 @@ const LINE_MAX_PX = 150;
 const TRAFFIC_MIN_DIST = 100;
 const TRAFFIC_MAX_DIST = 300;
 
-const SUBLABELS = ['VA', 'RWY5', 'VA RWY5'];
+const SUBLABELS = ['VA', 'VA RWY5'];
 
 function loadImage(src, canvasId) {
   return new Promise((resolve) => {
