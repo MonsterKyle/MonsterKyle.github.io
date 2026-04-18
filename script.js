@@ -247,7 +247,7 @@ function clearSVG() {
   return svg;
 }
 
-function makeDotGroup(x, y, name, sublabelText, sublabel2Text) {
+function makeDotGroup(x, y, name, sublabelText, sublabel2Text, sublabel3Text) {
   const group = document.createElement('div');
   group.className = 'dot-group';
   group.style.left = x + 'px';
@@ -275,6 +275,13 @@ function makeDotGroup(x, y, name, sublabelText, sublabel2Text) {
     sublabel2.className = 'dot-sublabel2';
     sublabel2.textContent = sublabel2Text;
     group.appendChild(sublabel2);
+  }
+
+  if (sublabel3Text) {
+    const sublabel3 = document.createElement('span');
+    sublabel3.className = 'dot-sublabel3';
+    sublabel3.textContent = sublabel3Text;
+    group.appendChild(sublabel3);
   }
 
   return group;
@@ -377,6 +384,8 @@ function toggleCustomMode() {
   const hint = document.getElementById('custom-hint');
   const clearBtn = document.getElementById('clear-btn');
   const generateBtn = document.getElementById('generate-btn');
+  const normalOptions = document.getElementById('normal-options');
+  const customOptions = document.getElementById('custom-options');
 
   if (customModeActive) {
     btn.classList.add('active');
@@ -384,6 +393,8 @@ function toggleCustomMode() {
     overlay.style.display = 'block';
     clearBtn.style.display = 'block';
     generateBtn.style.display = 'none';
+    normalOptions.style.display = 'none';
+    customOptions.style.display = 'flex';
     hint.style.display = 'block';
     hint.textContent = 'Click to place a dot';
     customClickStep = 0;
@@ -397,9 +408,67 @@ function toggleCustomMode() {
     hint.style.display = 'none';
     clearBtn.style.display = 'none';
     generateBtn.style.display = 'block';
+    normalOptions.style.display = 'flex';
+    customOptions.style.display = 'none';
     removeGhost();
     customClickStep = 0;
   }
+}
+
+function isCid() {
+  return document.getElementById('cid-checkbox').checked;
+}
+
+function isLowAlt()    { return document.getElementById('low-alt-checkbox').checked; }
+function isHighAlt()   { return document.getElementById('high-alt-checkbox').checked; }
+function isCustomAlt() { return document.getElementById('custom-alt-checkbox').checked; }
+
+// Populate custom altitude dropdown: 0–240 in multiples of 10
+const customAltSelect = document.getElementById('custom-alt-select');
+for (let v = 0; v <= 240; v += 10) {
+  const opt = document.createElement('option');
+  opt.value = v;
+  opt.textContent = v + 'C';
+  customAltSelect.appendChild(opt);
+}
+
+// All three altitude checkboxes are mutually exclusive
+const ALT_CHECKBOX_IDS = ['low-alt-checkbox', 'high-alt-checkbox', 'custom-alt-checkbox'];
+ALT_CHECKBOX_IDS.forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    if (document.getElementById(id).checked) {
+      ALT_CHECKBOX_IDS.filter(b => b !== id).forEach(b => {
+        document.getElementById(b).checked = false;
+      });
+    }
+  });
+});
+
+function randomAltitude() {
+  if (isLowAlt()) {
+    const steps = (100 - 40) / 10;
+    return (40 + Math.floor(Math.random() * (steps + 1)) * 10) + 'C';
+  }
+  if (isHighAlt()) {
+    const steps = (230 - 130) / 10;
+    return (130 + Math.floor(Math.random() * (steps + 1)) * 10) + 'C';
+  }
+  if (isCustomAlt()) {
+    return document.getElementById('custom-alt-select').value + 'C';
+  }
+  return null;
+}
+
+// Track used CIDs so each dot gets a unique one per session
+const usedCids = new Set();
+function randomCid() {
+  if (usedCids.size >= 101) usedCids.clear(); // reset if all used
+  let cid;
+  do {
+    cid = String(Math.floor(Math.random() * 101)).padStart(3, '0');
+  } while (usedCids.has(cid));
+  usedCids.add(cid);
+  return cid;
 }
 
 function removeGhost() {
@@ -467,7 +536,12 @@ function onCustomClick(e) {
 
     addCustomLine(customDotX, customDotY, x, y);
 
-    const group = makeDotGroup(customDotX, customDotY, customDotName, null, null);
+    const cidText = isCid() ? randomCid() : null;
+    const altText = randomAltitude();
+    // Order: altitude first, CID beneath
+    const sub1 = altText || cidText;
+    const sub2 = altText && cidText ? cidText : null;
+    const group = makeDotGroup(customDotX, customDotY, customDotName, sub1, sub2, null);
     group.classList.add('custom-dot');
     document.getElementById('canvas').appendChild(group);
 
