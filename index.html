@@ -10,6 +10,8 @@
   <img id="bg-image" src="d66.png" alt="" />
   <div id="controls">
     <button id="generate-btn" onclick="generate()">Generate</button>
+    <button id="custom-btn" onclick="toggleCustomMode()">Custom Mode</button>
+    <button id="clear-btn" onclick="clearAll()" style="display:none;">Clear All</button>
     <label id="kgwo-label">
       <input type="checkbox" id="kgwo-checkbox" />
       KGWO
@@ -28,6 +30,8 @@
     </label>
   </div>
   <svg id="line-overlay" viewBox="0 0 1078 908" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="custom-overlay"></div>
+  <div id="custom-hint"></div>
   <div id="canvas"></div>
   <canvas id="mask-canvas" style="display:none;"></canvas>
   <canvas id="walls-canvas" style="display:none;"></canvas>
