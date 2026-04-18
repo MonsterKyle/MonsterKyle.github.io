@@ -28,6 +28,14 @@ const TRAFFIC_MAX_DIST = 300;
 
 const SUBLABELS = ['VA', 'VA RWY5'];
 
+// Custom mode state
+let customModeActive = false;
+let customClickStep = 0;   // 0 = waiting for dot click, 1 = waiting for line end click
+let customDotX = 0;
+let customDotY = 0;
+let customDotName = '';
+let ghostDotEl = null;
+
 function loadImage(src, canvasId) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -359,6 +367,118 @@ function generate() {
     canvas.appendChild(makeDotGroup(pos.x, pos.y, randomName(), sublabelText, sublabel2Text));
   }
 }
+
+// ── Custom Mode ──────────────────────────────────────────────
+
+function toggleCustomMode() {
+  customModeActive = !customModeActive;
+  const btn = document.getElementById('custom-btn');
+  const overlay = document.getElementById('custom-overlay');
+  const hint = document.getElementById('custom-hint');
+  const clearBtn = document.getElementById('clear-btn');
+  const generateBtn = document.getElementById('generate-btn');
+
+  if (customModeActive) {
+    btn.classList.add('active');
+    btn.textContent = 'Custom Mode ON';
+    overlay.style.display = 'block';
+    clearBtn.style.display = 'block';
+    generateBtn.style.display = 'none';
+    hint.style.display = 'block';
+    hint.textContent = 'Click to place a dot';
+    customClickStep = 0;
+    // Clear generated dots when entering custom mode
+    document.querySelectorAll('.dot-group:not(.custom-dot)').forEach(el => el.remove());
+    clearSVG();
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'Custom Mode';
+    overlay.style.display = 'none';
+    hint.style.display = 'none';
+    clearBtn.style.display = 'none';
+    generateBtn.style.display = 'block';
+    removeGhost();
+    customClickStep = 0;
+  }
+}
+
+function removeGhost() {
+  if (ghostDotEl) {
+    ghostDotEl.remove();
+    ghostDotEl = null;
+  }
+}
+
+function clearAll() {
+  document.querySelectorAll('.dot-group').forEach(el => el.remove());
+  clearSVG();
+  removeGhost();
+  customClickStep = 0;
+  const hint = document.getElementById('custom-hint');
+  if (hint) hint.textContent = 'Click to place a dot';
+}
+
+function getEventPos(e) {
+  const rect = document.getElementById('custom-overlay').getBoundingClientRect();
+  return {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
+  };
+}
+
+function addCustomLine(x1, y1, x2, y2) {
+  const svg = document.getElementById('line-overlay');
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', x1);
+  line.setAttribute('y1', y1);
+  line.setAttribute('x2', x2);
+  line.setAttribute('y2', y2);
+  line.setAttribute('stroke', '#FFE033');
+  line.setAttribute('stroke-width', '1.5');
+  line.setAttribute('stroke-linecap', 'round');
+  line.classList.add('custom-line');
+  svg.appendChild(line);
+}
+
+function onCustomClick(e) {
+  if (!customModeActive) return;
+  const { x, y } = getEventPos(e);
+  const hint = document.getElementById('custom-hint');
+
+  if (customClickStep === 0) {
+    // First click — place ghost dot, record position and assign name
+    removeGhost();
+    customDotX = x;
+    customDotY = y;
+    customDotName = randomName();
+
+    ghostDotEl = document.createElement('div');
+    ghostDotEl.className = 'ghost-dot';
+    ghostDotEl.style.left = x + 'px';
+    ghostDotEl.style.top = y + 'px';
+    document.getElementById('canvas').appendChild(ghostDotEl);
+
+    hint.textContent = 'Now click where the line should end';
+    customClickStep = 1;
+
+  } else if (customClickStep === 1) {
+    // Second click — draw the real dot and line, remove ghost
+    removeGhost();
+
+    addCustomLine(customDotX, customDotY, x, y);
+
+    const group = makeDotGroup(customDotX, customDotY, customDotName, null, null);
+    group.classList.add('custom-dot');
+    document.getElementById('canvas').appendChild(group);
+
+    hint.textContent = 'Click to place a dot';
+    customClickStep = 0;
+  }
+}
+
+document.getElementById('custom-overlay').addEventListener('click', onCustomClick);
+
+// ─────────────────────────────────────────────────────────────
 
 async function init() {
   const maskResult = await loadImage('mask.png', 'mask-canvas');
