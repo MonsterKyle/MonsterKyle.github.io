@@ -66,6 +66,101 @@ html {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
+#custom-btn {
+  padding: 11px 24px;
+  font-size: 15px;
+  font-weight: 700;
+  background: transparent;
+  color: #fff;
+  border: 2px solid rgba(255,255,255,0.6);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  letter-spacing: 0.03em;
+}
+
+#custom-btn:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+#custom-btn:active {
+  transform: scale(0.97);
+}
+
+#custom-btn.active {
+  background: #FFE033;
+  color: #1a1a1a;
+  border-color: #FFE033;
+}
+
+#clear-btn {
+  padding: 11px 24px;
+  font-size: 15px;
+  font-weight: 700;
+  background: transparent;
+  color: #ff6b6b;
+  border: 2px solid rgba(255, 107, 107, 0.6);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+  transition: background 0.15s, transform 0.1s;
+  letter-spacing: 0.03em;
+}
+
+#clear-btn:hover {
+  background: rgba(255, 107, 107, 0.15);
+}
+
+#clear-btn:active {
+  transform: scale(0.97);
+}
+
+/* Invisible click-capture layer for custom mode */
+#custom-overlay {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1078px;
+  height: 908px;
+  z-index: 50;
+  cursor: crosshair;
+}
+
+/* Instruction hint at bottom of screen */
+#custom-hint {
+  display: none;
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  background: rgba(0,0,0,0.75);
+  color: #FFE033;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: 8px;
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  text-shadow: none;
+}
+
+/* Ghost dot shown after first click */
+.ghost-dot {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 224, 51, 0.4);
+  border: 2px dashed #FFE033;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 60;
+}
+
 #controls label {
   display: flex;
   align-items: center;
