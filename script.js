@@ -247,6 +247,119 @@ function clearSVG() {
   return svg;
 }
 
+// Wrap text elements in a block with a small drag handle
+function makeDraggableTextBlock(initialOffsetX, initialOffsetY) {
+  const block = document.createElement('div');
+  block.className = 'dot-text-block';
+  block.style.transform = `translate(${initialOffsetX}px, ${initialOffsetY}px)`;
+
+  let offsetX = initialOffsetX;
+  let offsetY = initialOffsetY;
+  const LIMIT = 120;
+
+  // Drag handle — appears top-right on hover
+  const handle = document.createElement('div');
+  handle.className = 'text-drag-handle';
+  handle.title = 'Drag to reposition';
+  handle.innerHTML = '⠿';
+  block.appendChild(handle);
+
+  // Delete button — appears top-right next to handle on hover
+  const deleteBtn = document.createElement('div');
+  deleteBtn.className = 'dot-delete-btn';
+  deleteBtn.title = 'Delete';
+  deleteBtn.innerHTML = '✕';
+  block.appendChild(deleteBtn);
+
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Find parent dot-group and its dotId
+    const group = block.closest('.dot-group');
+    if (!group) return;
+    const dotId = group.dataset.dotId;
+    // Remove line and handle from SVG
+    if (dotId) {
+      document.querySelectorAll(`[data-dot-id="${dotId}"]`).forEach(el => {
+        if (el !== group) el.remove();
+      });
+    }
+    group.remove();
+  });
+
+  deleteBtn.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    altDropdownInteracting = true;
+    setTimeout(() => { altDropdownInteracting = false; }, 300);
+  });
+
+  handle.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    altDropdownInteracting = true;
+    setTimeout(() => { altDropdownInteracting = false; }, 300);
+    handle.style.cursor = 'grabbing';
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origX = offsetX;
+    const origY = offsetY;
+
+    function onMove(ev) {
+      let nx = origX + (ev.clientX - startX);
+      let ny = origY + (ev.clientY - startY);
+      const dist = Math.sqrt(nx * nx + ny * ny);
+      if (dist > LIMIT) {
+        nx = (nx / dist) * LIMIT;
+        ny = (ny / dist) * LIMIT;
+      }
+      offsetX = nx;
+      offsetY = ny;
+      block.style.transform = `translate(${nx}px, ${ny}px)`;
+    }
+
+    function onUp() {
+      handle.style.cursor = 'grab';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+
+  return block;
+}
+
+
+function makeEditableSpan(el) {
+  el.style.cursor = 'text';
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (el.querySelector('input')) return; // already editing
+    const current = el.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'alt-num-input';
+    input.value = current;
+    input.style.width = Math.max(40, current.length * 10) + 'px';
+    el.textContent = '';
+    el.appendChild(input);
+    input.focus();
+    input.select();
+
+    function commit() {
+      el.textContent = input.value.trim() || current;
+    }
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); input.blur(); }
+      if (e.key === 'Escape') { el.textContent = current; }
+      e.stopPropagation();
+    });
+    input.addEventListener('click', e => e.stopPropagation());
+  });
+  return el;
+}
+
 function makeDotGroup(x, y, name, sublabelText, sublabel2Text, sublabel3Text) {
   const group = document.createElement('div');
   group.className = 'dot-group';
@@ -398,6 +511,9 @@ function toggleCustomMode() {
     hint.style.display = 'block';
     hint.textContent = 'Click to place a dot';
     customClickStep = 0;
+    document.getElementById('canvas').style.zIndex = '55';
+    document.getElementById('canvas').style.cursor = 'crosshair';
+    document.getElementById('line-overlay').style.zIndex = '60';
     // Clear generated dots when entering custom mode
     document.querySelectorAll('.dot-group:not(.custom-dot)').forEach(el => el.remove());
     clearSVG();
@@ -410,6 +526,9 @@ function toggleCustomMode() {
     generateBtn.style.display = 'block';
     normalOptions.style.display = 'flex';
     customOptions.style.display = 'none';
+    document.getElementById('canvas').style.zIndex = '1';
+    document.getElementById('canvas').style.cursor = 'default';
+    document.getElementById('line-overlay').style.zIndex = '2';
     removeGhost();
     customClickStep = 0;
   }
@@ -471,6 +590,163 @@ function randomCid() {
   return cid;
 }
 
+// Flag set when user interacts with a dropdown option — prevents accidental dot placement
+let altDropdownInteracting = false;
+
+const ALT_SYMBOLS = ['C', 'B', '↑', '↓', 'T'];
+
+// Build an interactive altitude widget for custom dots
+// altText is e.g. "70C" — number + symbol
+function makeAltitudeWidget(altText) {
+  // Parse number and symbol from altText
+  const match = altText.match(/^(\d+)(C|B|↑|↓|T)$/);
+  const initNum = match ? match[1] : altText.replace(/[^\d]/g, '') || '0';
+  const initSym = match ? match[2] : 'C';
+
+  const wrapper = document.createElement('span');
+  wrapper.className = 'alt-widget';
+
+  // Left number — click to edit inline
+  const numLeft = document.createElement('span');
+  numLeft.className = 'alt-num';
+  numLeft.textContent = initNum;
+
+  // Symbol — click to open dropdown
+  const sym = document.createElement('span');
+  sym.className = 'alt-sym';
+  const symText = document.createTextNode(initSym);
+  sym.appendChild(symText);
+
+  // Right number — only visible when symbol is not C
+  const numRight = document.createElement('span');
+  numRight.className = 'alt-num';
+  numRight.textContent = initNum;
+  numRight.style.display = initSym === 'C' ? 'none' : 'inline';
+
+  // Symbol dropdown
+  const dropdown = document.createElement('div');
+  dropdown.className = 'alt-sym-dropdown';
+  dropdown.style.display = 'none';
+  ALT_SYMBOLS.forEach(s => {
+    const opt = document.createElement('div');
+    opt.className = 'alt-sym-option';
+    opt.textContent = s;
+    opt.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      altDropdownInteracting = true;
+      setTimeout(() => { altDropdownInteracting = false; }, 300);
+      let chosen = s;
+
+      // Auto-correct arrows based on left vs right number
+      if (chosen === '↑' || chosen === '↓') {
+        const leftVal  = parseFloat(numLeft.textContent)  || 0;
+        const rightVal = parseFloat(numRight.textContent) || leftVal;
+        if (rightVal > leftVal)  chosen = '↑';
+        if (rightVal < leftVal)  chosen = '↓';
+      }
+
+      symText.nodeValue = chosen;
+      numRight.style.display = chosen === 'C' ? 'none' : 'inline';
+      dropdown.style.display = 'none';
+    });
+    dropdown.appendChild(opt);
+  });
+  dropdown.addEventListener('click', e => e.stopPropagation());
+  dropdown.addEventListener('mousedown', e => e.stopPropagation());
+  sym.appendChild(dropdown);
+
+  // Open/close dropdown on symbol click
+  sym.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = dropdown.style.display === 'flex';
+    closeAllAltDropdowns();
+    if (!isOpen) {
+      dropdown.style.display = 'flex';
+      dropdown.style.flexDirection = 'column';
+    }
+  });
+
+  // Inline editing for left number
+  numLeft.addEventListener('click', (e) => {
+    e.stopPropagation();
+    startNumEdit(numLeft);
+  });
+
+  // Inline editing for right number — re-checks arrow direction after commit
+  numRight.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const current = numRight.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'alt-num-input';
+    input.value = current;
+    numRight.textContent = '';
+    numRight.appendChild(input);
+    input.focus();
+    input.select();
+
+    function commitRight() {
+      const val = input.value.trim() || current;
+      numRight.textContent = val;
+      // Auto-correct arrow if symbol is ↑ or ↓
+      const curSym = symText.nodeValue;
+      if (curSym === '↑' || curSym === '↓') {
+        const leftVal  = parseFloat(numLeft.textContent)  || 0;
+        const rightVal = parseFloat(val) || 0;
+        if (rightVal > leftVal)  symText.nodeValue = '↑';
+        if (rightVal < leftVal)  symText.nodeValue = '↓';
+      }
+    }
+
+    input.addEventListener('blur', commitRight);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitRight(); input.blur(); }
+      if (e.key === 'Escape') { numRight.textContent = current; }
+      e.stopPropagation();
+    });
+    input.addEventListener('click', e => e.stopPropagation());
+  });
+
+  wrapper.addEventListener('click', e => e.stopPropagation());
+  wrapper.appendChild(numLeft);
+  wrapper.appendChild(sym);
+  wrapper.appendChild(numRight);
+
+  return wrapper;
+}
+
+function startNumEdit(el) {
+  const current = el.textContent;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'alt-num-input';
+  input.value = current;
+  el.textContent = '';
+  el.appendChild(input);
+  input.focus();
+  input.select();
+
+  function commit() {
+    const val = input.value.trim() || current;
+    el.textContent = val;
+  }
+
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); input.blur(); }
+    if (e.key === 'Escape') { el.textContent = current; }
+    e.stopPropagation();
+  });
+  input.addEventListener('click', e => e.stopPropagation());
+}
+
+function closeAllAltDropdowns() {
+  document.querySelectorAll('.alt-sym-dropdown').forEach(d => d.style.display = 'none');
+}
+
+// Close dropdowns when clicking elsewhere
+document.addEventListener('click', closeAllAltDropdowns);
+
 function removeGhost() {
   if (ghostDotEl) {
     ghostDotEl.remove();
@@ -488,14 +764,14 @@ function clearAll() {
 }
 
 function getEventPos(e) {
-  const rect = document.getElementById('custom-overlay').getBoundingClientRect();
+  const rect = document.getElementById('canvas').getBoundingClientRect();
   return {
     x: e.clientX - rect.left,
     y: e.clientY - rect.top
   };
 }
 
-function addCustomLine(x1, y1, x2, y2) {
+function addCustomLine(x1, y1, x2, y2, dotId) {
   const svg = document.getElementById('line-overlay');
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   line.setAttribute('x1', x1);
@@ -506,11 +782,66 @@ function addCustomLine(x1, y1, x2, y2) {
   line.setAttribute('stroke-width', '1.5');
   line.setAttribute('stroke-linecap', 'round');
   line.classList.add('custom-line');
+  line.dataset.dotId = dotId;
   svg.appendChild(line);
+
+  // Draggable endpoint handle
+  const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  handle.setAttribute('cx', x2);
+  handle.setAttribute('cy', y2);
+  handle.setAttribute('r', 6);
+  handle.setAttribute('fill', '#FFE033');
+  handle.setAttribute('fill-opacity', '0.01');
+  handle.setAttribute('stroke', '#FFE033');
+  handle.setAttribute('stroke-width', '1.5');
+  handle.setAttribute('stroke-opacity', '0');
+  handle.style.cursor = 'grab';
+  handle.classList.add('line-handle');
+  handle.dataset.dotId = dotId;
+  svg.appendChild(handle);
+
+  // Show handle ring on hover
+  handle.addEventListener('mouseenter', () => {
+    handle.setAttribute('stroke-opacity', '1');
+    handle.setAttribute('fill-opacity', '0.2');
+  });
+  handle.addEventListener('mouseleave', () => {
+    handle.setAttribute('stroke-opacity', '0');
+    handle.setAttribute('fill-opacity', '0.01');
+  });
+
+  // Drag endpoint
+  handle.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    handle.style.cursor = 'grabbing';
+    const svgRect = svg.getBoundingClientRect();
+
+    function onMove(ev) {
+      const nx = ev.clientX - svgRect.left;
+      const ny = ev.clientY - svgRect.top;
+      line.setAttribute('x2', nx);
+      line.setAttribute('y2', ny);
+      handle.setAttribute('cx', nx);
+      handle.setAttribute('cy', ny);
+    }
+
+    function onUp() {
+      handle.style.cursor = 'grab';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+
+  return { line, handle };
 }
 
 function onCustomClick(e) {
   if (!customModeActive) return;
+  if (altDropdownInteracting) return;
   const { x, y } = getEventPos(e);
   const hint = document.getElementById('custom-hint');
 
@@ -534,15 +865,96 @@ function onCustomClick(e) {
     // Second click — draw the real dot and line, remove ghost
     removeGhost();
 
-    addCustomLine(customDotX, customDotY, x, y);
+    const dotId = 'dot-' + Date.now();
+    addCustomLine(customDotX, customDotY, x, y, dotId);
 
     const cidText = isCid() ? randomCid() : null;
     const altText = randomAltitude();
-    // Order: altitude first, CID beneath
-    const sub1 = altText || cidText;
-    const sub2 = altText && cidText ? cidText : null;
-    const group = makeDotGroup(customDotX, customDotY, customDotName, sub1, sub2, null);
-    group.classList.add('custom-dot');
+
+    const group = document.createElement('div');
+    group.className = 'dot-group custom-dot';
+    group.style.left = customDotX + 'px';
+    group.style.top  = customDotY + 'px';
+    group.dataset.dotId = dotId;
+
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    dot.style.cursor = 'grab';
+    group.appendChild(dot);
+
+    // Drag the dot (and update line start)
+    dot.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      dot.style.cursor = 'grabbing';
+      const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+      const startX = e.clientX - canvasRect.left;
+      const startY = e.clientY - canvasRect.top;
+      const origLeft = parseFloat(group.style.left);
+      const origTop  = parseFloat(group.style.top);
+
+      function onMove(ev) {
+        const nx = ev.clientX - canvasRect.left;
+        const ny = ev.clientY - canvasRect.top;
+        const dx = nx - startX;
+        const dy = ny - startY;
+        const newLeft = origLeft + dx;
+        const newTop  = origTop  + dy;
+        group.style.left = newLeft + 'px';
+        group.style.top  = newTop  + 'px';
+        // Update line start point
+        const line = document.querySelector(`.custom-line[data-dot-id="${dotId}"]`);
+        const handle = document.querySelector(`.line-handle[data-dot-id="${dotId}"]`);
+        if (line) {
+          line.setAttribute('x1', newLeft);
+          line.setAttribute('y1', newTop);
+        }
+      }
+
+      function onUp() {
+        dot.style.cursor = 'grab';
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    });
+
+    // Name — editable
+    const nameEl = document.createElement('span');
+    nameEl.className = 'dot-label';
+    nameEl.textContent = customDotName;
+    makeEditableSpan(nameEl);
+
+    // Build text block — starts at default offset (16px right, -8px up)
+    const textBlock = makeDraggableTextBlock(16, -8);
+    textBlock.appendChild(nameEl);
+
+    // Altitude — interactive widget
+    if (altText) {
+      const altEl = document.createElement('span');
+      altEl.className = 'dot-sublabel';
+      altEl.appendChild(makeAltitudeWidget(altText));
+      textBlock.appendChild(altEl);
+
+      if (cidText) {
+        const cidEl = document.createElement('span');
+        cidEl.className = 'dot-sublabel2';
+        cidEl.textContent = cidText;
+        makeEditableSpan(cidEl);
+        textBlock.appendChild(cidEl);
+      }
+    } else if (cidText) {
+      const cidEl = document.createElement('span');
+      cidEl.className = 'dot-sublabel';
+      cidEl.textContent = cidText;
+      makeEditableSpan(cidEl);
+      textBlock.appendChild(cidEl);
+    }
+
+    group.appendChild(textBlock);
+
     document.getElementById('canvas').appendChild(group);
 
     hint.textContent = 'Click to place a dot';
@@ -550,7 +962,21 @@ function onCustomClick(e) {
   }
 }
 
-document.getElementById('custom-overlay').addEventListener('click', onCustomClick);
+document.getElementById('canvas').addEventListener('click', (e) => {
+  if (!customModeActive) return;
+  if (altDropdownInteracting) return;
+  const blocked = (e.target.closest('.dot-group') && !e.target.closest('.ghost-dot')) ||
+                  e.target.closest('.alt-widget') ||
+                  e.target.closest('.alt-sym-dropdown') ||
+                  e.target.closest('.alt-sym-option') ||
+                  e.target.closest('.dot-text-block') ||
+                  e.target.closest('.text-drag-handle') ||
+                  e.target.closest('.dot-label') ||
+                  e.target.closest('.dot-sublabel') ||
+                  e.target.closest('.dot-sublabel2') ||
+                  e.target.closest('.dot-sublabel3');
+  if (!blocked) onCustomClick(e);
+});
 
 // ─────────────────────────────────────────────────────────────
 
