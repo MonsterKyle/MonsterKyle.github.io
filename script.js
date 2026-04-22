@@ -292,30 +292,20 @@ function makeDraggableTextBlock(initialOffsetX, initialOffsetY) {
     setTimeout(() => { altDropdownInteracting = false; }, 300);
   });
 
-  handle.addEventListener('mousedown', startTextDrag);
-  handle.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    startTextDrag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY,
-                    stopPropagation: () => {}, preventDefault: () => {} });
-  }, { passive: false });
-
-  function startTextDrag(e) {
+  handle.addEventListener('mousedown', (e) => {
     e.stopPropagation();
     e.preventDefault();
     altDropdownInteracting = true;
     setTimeout(() => { altDropdownInteracting = false; }, 300);
     handle.style.cursor = 'grabbing';
-    const scale = getScale();
-    const startX = e.clientX / scale;
-    const startY = e.clientY / scale;
+    const startX = e.clientX;
+    const startY = e.clientY;
     const origX = offsetX;
     const origY = offsetY;
 
     function onMove(ev) {
-      const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
-      const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
-      let nx = origX + (cx / scale - startX);
-      let ny = origY + (cy / scale - startY);
+      let nx = origX + (ev.clientX - startX);
+      let ny = origY + (ev.clientY - startY);
       const dist = Math.sqrt(nx * nx + ny * ny);
       if (dist > LIMIT) {
         nx = (nx / dist) * LIMIT;
@@ -330,15 +320,11 @@ function makeDraggableTextBlock(initialOffsetX, initialOffsetY) {
       handle.style.cursor = 'grab';
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onUp);
     }
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', onUp);
-  }
+  });
 
   return block;
 }
@@ -777,17 +763,11 @@ function clearAll() {
   if (hint) hint.textContent = 'Click to place a dot';
 }
 
-function getScale() {
-  const t = document.body.style.transform;
-  return t ? parseFloat(t.replace('scale(', '').replace(')', '')) || 1 : 1;
-}
-
 function getEventPos(e) {
   const rect = document.getElementById('canvas').getBoundingClientRect();
-  const scale = getScale();
   return {
-    x: (e.clientX - rect.left) / scale,
-    y: (e.clientY - rect.top)  / scale
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
   };
 }
 
@@ -830,26 +810,16 @@ function addCustomLine(x1, y1, x2, y2, dotId) {
     handle.setAttribute('fill-opacity', '0.01');
   });
 
-  // Drag endpoint — mouse and touch
-  handle.addEventListener('mousedown', startHandleDrag);
-  handle.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    startHandleDrag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY,
-                      stopPropagation: () => {}, preventDefault: () => {} });
-  }, { passive: false });
-
-  function startHandleDrag(e) {
+  // Drag endpoint
+  handle.addEventListener('mousedown', (e) => {
     e.stopPropagation();
     e.preventDefault();
     handle.style.cursor = 'grabbing';
     const svgRect = svg.getBoundingClientRect();
-    const scale = getScale();
 
     function onMove(ev) {
-      const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
-      const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
-      const nx = (cx - svgRect.left) / scale;
-      const ny = (cy - svgRect.top)  / scale;
+      const nx = ev.clientX - svgRect.left;
+      const ny = ev.clientY - svgRect.top;
       line.setAttribute('x2', nx);
       line.setAttribute('y2', ny);
       handle.setAttribute('cx', nx);
@@ -860,15 +830,11 @@ function addCustomLine(x1, y1, x2, y2, dotId) {
       handle.style.cursor = 'grab';
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onUp);
     }
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', onUp);
-  }
+  });
 
   return { line, handle };
 }
@@ -916,40 +882,29 @@ function onCustomClick(e) {
     dot.style.cursor = 'grab';
     group.appendChild(dot);
 
+    // Drag the dot (and update line start)
     dot.addEventListener('mousedown', (e) => {
-      if (e.type === 'mousedown' && e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
-      startDotDrag(e);
-    });
-    dot.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      touchWasDrag = true; // dragging a dot is never a tap
-      startDotDrag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY,
-                     stopPropagation: () => {}, preventDefault: () => {} });
-    }, { passive: false });
-
-    function startDotDrag(e) {
       e.stopPropagation();
       e.preventDefault();
       dot.style.cursor = 'grabbing';
       const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-      const scale = getScale();
-      const startX = (e.clientX - canvasRect.left) / scale;
-      const startY = (e.clientY - canvasRect.top)  / scale;
+      const startX = e.clientX - canvasRect.left;
+      const startY = e.clientY - canvasRect.top;
       const origLeft = parseFloat(group.style.left);
       const origTop  = parseFloat(group.style.top);
 
       function onMove(ev) {
-        const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
-        const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
-        const nx = (cx - canvasRect.left) / scale;
-        const ny = (cy - canvasRect.top)  / scale;
+        const nx = ev.clientX - canvasRect.left;
+        const ny = ev.clientY - canvasRect.top;
         const dx = nx - startX;
         const dy = ny - startY;
         const newLeft = origLeft + dx;
         const newTop  = origTop  + dy;
         group.style.left = newLeft + 'px';
         group.style.top  = newTop  + 'px';
+        // Update line start point
         const line = document.querySelector(`.custom-line[data-dot-id="${dotId}"]`);
+        const handle = document.querySelector(`.line-handle[data-dot-id="${dotId}"]`);
         if (line) {
           line.setAttribute('x1', newLeft);
           line.setAttribute('y1', newTop);
@@ -960,15 +915,11 @@ function onCustomClick(e) {
         dot.style.cursor = 'grab';
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
-        window.removeEventListener('touchmove', onMove);
-        window.removeEventListener('touchend', onUp);
       }
 
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
-      window.addEventListener('touchmove', onMove, { passive: false });
-      window.addEventListener('touchend', onUp);
-    }
+    });
 
     // Name — editable
     const nameEl = document.createElement('span');
@@ -1052,54 +1003,6 @@ async function init() {
   if (maskTrafficResult) { maskTrafficCtx = maskTrafficResult.ctx; maskTrafficWidth = maskTrafficResult.width; maskTrafficHeight = maskTrafficResult.height; }
 
   generate();
-}
-
-// ── Viewport scaling ──────────────────────────────────────────
-function scaleToViewport() {
-  const scaleX = window.innerWidth  / 1078;
-  const scaleY = window.innerHeight / 908;
-  const scale  = Math.min(scaleX, scaleY);
-  document.body.style.transform = `scale(${scale})`;
-  document.body.style.marginLeft = '0px';
-  document.body.style.marginTop  = '0px';
-}
-scaleToViewport();
-window.addEventListener('resize', scaleToViewport);
-
-// ── Touch support ─────────────────────────────────────────────
-let touchWasDrag = false; // set true if touch moved enough to count as a drag
-
-// Forward single-tap on canvas as a click for custom placement
-document.getElementById('canvas').addEventListener('touchstart', (e) => {
-  touchWasDrag = false;
-}, { passive: true });
-
-document.getElementById('canvas').addEventListener('touchmove', () => {
-  touchWasDrag = true;
-}, { passive: true });
-
-document.getElementById('canvas').addEventListener('touchend', (e) => {
-  if (!customModeActive) return;
-  if (touchWasDrag) return; // was a drag/scroll, not a tap
-  e.preventDefault();
-  const t = e.changedTouches[0];
-  document.getElementById('canvas').dispatchEvent(new MouseEvent('click', {
-    clientX: t.clientX, clientY: t.clientY, bubbles: true
-  }));
-}, { passive: false });
-
-// Touch dragging for dot circle
-function addTouchDrag(element, onMoveCallback, onUpCallback) {
-  element.addEventListener('touchstart', (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const t = e.touches[0];
-    const mockDown = { clientX: t.clientX, clientY: t.clientY,
-                       stopPropagation: () => {}, preventDefault: () => {} };
-    element.dispatchEvent(new MouseEvent('mousedown', {
-      clientX: t.clientX, clientY: t.clientY, bubbles: false
-    }));
-  }, { passive: false });
 }
 
 init();
