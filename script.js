@@ -922,6 +922,7 @@ function onCustomClick(e) {
     });
     dot.addEventListener('touchstart', (e) => {
       e.preventDefault();
+      touchWasDrag = true; // dragging a dot is never a tap
       startDotDrag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY,
                      stopPropagation: () => {}, preventDefault: () => {} });
     }, { passive: false });
@@ -1066,22 +1067,24 @@ scaleToViewport();
 window.addEventListener('resize', scaleToViewport);
 
 // ── Touch support ─────────────────────────────────────────────
-// Convert a TouchEvent into a synthetic mouse-like event with corrected coords
-function touchToMouseEvent(te, type) {
-  const t = te.changedTouches[0];
-  return { clientX: t.clientX, clientY: t.clientY, target: te.target,
-           stopPropagation: () => te.stopPropagation(),
-           preventDefault:  () => te.preventDefault(),
-           type };
-}
+let touchWasDrag = false; // set true if touch moved enough to count as a drag
 
 // Forward single-tap on canvas as a click for custom placement
+document.getElementById('canvas').addEventListener('touchstart', (e) => {
+  touchWasDrag = false;
+}, { passive: true });
+
+document.getElementById('canvas').addEventListener('touchmove', () => {
+  touchWasDrag = true;
+}, { passive: true });
+
 document.getElementById('canvas').addEventListener('touchend', (e) => {
   if (!customModeActive) return;
+  if (touchWasDrag) return; // was a drag/scroll, not a tap
   e.preventDefault();
-  const synth = touchToMouseEvent(e, 'click');
+  const t = e.changedTouches[0];
   document.getElementById('canvas').dispatchEvent(new MouseEvent('click', {
-    clientX: synth.clientX, clientY: synth.clientY, bubbles: true
+    clientX: t.clientX, clientY: t.clientY, bubbles: true
   }));
 }, { passive: false });
 
