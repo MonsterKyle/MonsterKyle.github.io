@@ -1070,39 +1070,57 @@ scaleToViewport();
 window.addEventListener('resize', scaleToViewport);
 
 // ── Touch support ─────────────────────────────────────────────
-let touchWasDrag = false; // set true if touch moved enough to count as a drag
+let touchWasDrag = false;
+let touchStartX = 0;
+let touchStartY = 0;
+const DRAG_THRESHOLD = 8; // px — movement less than this is a tap
 
-// Forward single-tap on canvas as a click for custom placement
 document.getElementById('canvas').addEventListener('touchstart', (e) => {
   touchWasDrag = false;
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
 }, { passive: true });
 
-document.getElementById('canvas').addEventListener('touchmove', () => {
-  touchWasDrag = true;
+document.getElementById('canvas').addEventListener('touchmove', (e) => {
+  const dx = Math.abs(e.touches[0].clientX - touchStartX);
+  const dy = Math.abs(e.touches[0].clientY - touchStartY);
+  if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) touchWasDrag = true;
 }, { passive: true });
 
 document.getElementById('canvas').addEventListener('touchend', (e) => {
   if (!customModeActive) return;
-  if (touchWasDrag) return; // was a drag/scroll, not a tap
+  if (touchWasDrag) return;
   e.preventDefault();
-  const t = e.changedTouches[0];
-  document.getElementById('canvas').dispatchEvent(new MouseEvent('click', {
-    clientX: t.clientX, clientY: t.clientY, bubbles: true
-  }));
-}, { passive: false });
 
-// Touch dragging for dot circle
-function addTouchDrag(element, onMoveCallback, onUpCallback) {
-  element.addEventListener('touchstart', (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const t = e.touches[0];
-    const mockDown = { clientX: t.clientX, clientY: t.clientY,
-                       stopPropagation: () => {}, preventDefault: () => {} };
-    element.dispatchEvent(new MouseEvent('mousedown', {
-      clientX: t.clientX, clientY: t.clientY, bubbles: false
-    }));
-  }, { passive: false });
-}
+  const t = e.changedTouches[0];
+  // Check what element is at the touch point
+  const el = document.elementFromPoint(t.clientX, t.clientY);
+  if (!el) return;
+
+  const blocked = (el.closest('.dot-group') && !el.closest('.ghost-dot')) ||
+                  el.closest('.alt-widget') ||
+                  el.closest('.alt-sym-dropdown') ||
+                  el.closest('.alt-sym-option') ||
+                  el.closest('.dot-text-block') ||
+                  el.closest('.text-drag-handle') ||
+                  el.closest('.dot-delete-btn') ||
+                  el.closest('.dot-label') ||
+                  el.closest('.dot-sublabel') ||
+                  el.closest('.dot-sublabel2') ||
+                  el.closest('.dot-sublabel3');
+
+  if (blocked) {
+    // If tapping a text element, trigger its click for editing
+    if (el.closest('.dot-label') || el.closest('.dot-sublabel') ||
+        el.closest('.dot-sublabel2') || el.closest('.dot-sublabel3')) {
+      el.click();
+    }
+    return;
+  }
+
+  // Safe to place a dot
+  onCustomClick({ clientX: t.clientX, clientY: t.clientY,
+                  target: el, stopPropagation: () => {}, preventDefault: () => {} });
+}, { passive: false });
 
 init();
