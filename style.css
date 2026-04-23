@@ -231,6 +231,7 @@ html {
 
 #line-overlay .line-handle {
   pointer-events: all;
+  touch-action: none;
 }
 
 .dot-group {
@@ -241,6 +242,7 @@ html {
 .dot-group .dot {
   position: absolute;
   transform: translate(-50%, -50%);
+  touch-action: none;
 }
 
 .dot-group .dot-text-block {
@@ -265,6 +267,7 @@ html {
   transition: color 0.15s;
   user-select: none;
   line-height: 1;
+  touch-action: none;
 }
 
 .dot-text-block:hover .text-drag-handle {
