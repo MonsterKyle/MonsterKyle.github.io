@@ -4,6 +4,7 @@ const DIGITS = '0123456789';
 const IMG_W = 1078;
 const IMG_H = 908;
 
+//Version 0.6
 // Default masks
 let maskCtx = null, maskWidth = 0, maskHeight = 0;
 let wallsCtx = null, wallsWidth = 0, wallsHeight = 0;
