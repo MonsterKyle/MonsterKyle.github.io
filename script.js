@@ -646,32 +646,35 @@ function makeAltitudeWidget(altText) {
     const opt = document.createElement('div');
     opt.className = 'alt-sym-option';
     opt.textContent = s;
-    opt.addEventListener('mousedown', (e) => {
+
+    function selectOption(e) {
       e.stopPropagation();
+      e.preventDefault();
       altDropdownInteracting = true;
       setTimeout(() => { altDropdownInteracting = false; }, 300);
       let chosen = s;
-
-      // Auto-correct arrows based on left vs right number
       if (chosen === '↑' || chosen === '↓') {
         const leftVal  = parseFloat(numLeft.textContent)  || 0;
         const rightVal = parseFloat(numRight.textContent) || leftVal;
         if (rightVal > leftVal)  chosen = '↑';
         if (rightVal < leftVal)  chosen = '↓';
       }
-
       symText.nodeValue = chosen;
       numRight.style.display = chosen === 'C' ? 'none' : 'inline';
       dropdown.style.display = 'none';
-    });
+    }
+
+    opt.addEventListener('mousedown', selectOption);
+    opt.addEventListener('touchend', selectOption, { passive: false });
     dropdown.appendChild(opt);
   });
   dropdown.addEventListener('click', e => e.stopPropagation());
   dropdown.addEventListener('mousedown', e => e.stopPropagation());
+  dropdown.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
   sym.appendChild(dropdown);
 
-  // Open/close dropdown on symbol click
-  sym.addEventListener('click', (e) => {
+  // Open/close dropdown on symbol click or tap
+  function toggleDropdown(e) {
     e.stopPropagation();
     const isOpen = dropdown.style.display === 'flex';
     closeAllAltDropdowns();
@@ -679,7 +682,12 @@ function makeAltitudeWidget(altText) {
       dropdown.style.display = 'flex';
       dropdown.style.flexDirection = 'column';
     }
-  });
+  }
+  sym.addEventListener('click', toggleDropdown);
+  sym.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    toggleDropdown(e);
+  }, { passive: false });
 
   // Inline editing for left number
   numLeft.addEventListener('click', (e) => {
