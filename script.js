@@ -4,7 +4,6 @@ const DIGITS = '0123456789';
 const IMG_W = 1078;
 const IMG_H = 908;
 
-//Version 0.6
 // Default masks
 let maskCtx = null, maskWidth = 0, maskHeight = 0;
 let wallsCtx = null, wallsWidth = 0, wallsHeight = 0;
@@ -517,8 +516,8 @@ function toggleCustomMode() {
   const customOptions = document.getElementById('custom-options');
 
   if (customModeActive) {
-    btn.classList.add('active');
-    btn.textContent = 'Custom Mode ON';
+    if (btn) btn.classList.add('active');
+    if (btn) btn.textContent = 'Custom Mode ON';
     overlay.style.display = 'block';
     clearBtn.style.display = 'block';
     generateBtn.style.display = 'none';
@@ -530,10 +529,11 @@ function toggleCustomMode() {
     document.getElementById('canvas').style.zIndex = '55';
     document.getElementById('canvas').style.cursor = 'crosshair';
     document.getElementById('line-overlay').style.zIndex = '60';
-    // Clear generated dots when entering custom mode
     document.querySelectorAll('.dot-group:not(.custom-dot)').forEach(el => el.remove());
     clearSVG();
-  } else {
+  }
+  /* OFF branch temporarily disabled
+  else {
     btn.classList.remove('active');
     btn.textContent = 'Custom Mode';
     overlay.style.display = 'none';
@@ -548,6 +548,7 @@ function toggleCustomMode() {
     removeGhost();
     customClickStep = 0;
   }
+  */
 }
 
 function isCid() {
@@ -884,6 +885,58 @@ function addCustomLine(x1, y1, x2, y2, dotId) {
   return { line, handle };
 }
 
+function setupDotDrag(dot, group, dotId) {
+  dot.addEventListener('mousedown', (e) => {
+    if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+    startDotDrag(e);
+  });
+  dot.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    touchWasDrag = true;
+    startDotDrag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY,
+                   stopPropagation: () => {}, preventDefault: () => {} });
+  }, { passive: false });
+
+  function startDotDrag(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    dot.style.cursor = 'grabbing';
+    const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+    const scale = getScale();
+    const startX = (e.clientX - canvasRect.left) / scale;
+    const startY = (e.clientY - canvasRect.top)  / scale;
+    const origLeft = parseFloat(group.style.left);
+    const origTop  = parseFloat(group.style.top);
+
+    function onMove(ev) {
+      const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
+      const nx = (cx - canvasRect.left) / scale;
+      const ny = (cy - canvasRect.top)  / scale;
+      const newLeft = origLeft + (nx - startX);
+      const newTop  = origTop  + (ny - startY);
+      group.style.left = newLeft + 'px';
+      group.style.top  = newTop  + 'px';
+      const line = document.querySelector(`.custom-line[data-dot-id="${dotId}"]`);
+      if (line) { line.setAttribute('x1', newLeft); line.setAttribute('y1', newTop); }
+    }
+
+    function onUp() {
+      dot.style.cursor = 'grab';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onUp);
+  }
+}
+
 function onCustomClick(e) {
   if (!customModeActive) return;
   if (altDropdownInteracting) return;
@@ -926,61 +979,7 @@ function onCustomClick(e) {
     dot.className = 'dot';
     dot.style.cursor = 'grab';
     group.appendChild(dot);
-
-    dot.addEventListener('mousedown', (e) => {
-      if (e.type === 'mousedown' && e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
-      startDotDrag(e);
-    });
-    dot.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      touchWasDrag = true;
-      startDotDrag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY,
-                     stopPropagation: () => {}, preventDefault: () => {} });
-    }, { passive: false });
-
-    function startDotDrag(e) {
-      e.stopPropagation();
-      e.preventDefault();
-      dot.style.cursor = 'grabbing';
-      const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-      const scale = getScale();
-      const startX = (e.clientX - canvasRect.left) / scale;
-      const startY = (e.clientY - canvasRect.top)  / scale;
-      const origLeft = parseFloat(group.style.left);
-      const origTop  = parseFloat(group.style.top);
-
-      function onMove(ev) {
-        const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
-        const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
-        const nx = (cx - canvasRect.left) / scale;
-        const ny = (cy - canvasRect.top)  / scale;
-        const dx = nx - startX;
-        const dy = ny - startY;
-        const newLeft = origLeft + dx;
-        const newTop  = origTop  + dy;
-        group.style.left = newLeft + 'px';
-        group.style.top  = newTop  + 'px';
-        const line = document.querySelector(`.custom-line[data-dot-id="${dotId}"]`);
-        if (line) {
-          line.setAttribute('x1', newLeft);
-          line.setAttribute('y1', newTop);
-        }
-      }
-
-      function onUp() {
-        dot.style.cursor = 'grab';
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        window.removeEventListener('touchmove', onMove);
-        window.removeEventListener('touchend', onUp);
-      }
-
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-      window.addEventListener('touchmove', onMove, { passive: false });
-      window.addEventListener('touchend', onUp);
-    }
+    setupDotDrag(dot, group, dotId);
 
     // Name — editable
     const nameEl = document.createElement('span');
@@ -1038,6 +1037,227 @@ document.getElementById('canvas').addEventListener('click', (e) => {
                   e.target.closest('.dot-sublabel3');
   if (!blocked) onCustomClick(e);
 });
+
+// ── Share / Load ──────────────────────────────────────────────
+
+// Compress bytes using DeflateRaw, return base64 string
+async function compress(str) {
+  const bytes = new TextEncoder().encode(str);
+  const cs = new CompressionStream('deflate-raw');
+  const writer = cs.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+  const chunks = [];
+  const reader = cs.readable.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) { out.set(c, offset); offset += c.length; }
+  return btoa(String.fromCharCode(...out));
+}
+
+// Decompress base64 string back to original string
+async function decompress(b64) {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+  const chunks = [];
+  const reader = ds.readable.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) { out.set(c, offset); offset += c.length; }
+  return new TextDecoder().decode(out);
+}
+
+function serializeLayout() {
+  const dots = [];
+  document.querySelectorAll('.custom-dot').forEach(group => {
+    const dotId = group.dataset.dotId;
+    // Round to integers — sub-pixel accuracy not needed
+    const x = Math.round(parseFloat(group.style.left));
+    const y = Math.round(parseFloat(group.style.top));
+
+    const lineEl = document.querySelector(`.custom-line[data-dot-id="${dotId}"]`);
+    const lx = lineEl ? Math.round(parseFloat(lineEl.getAttribute('x2'))) : x + 100;
+    const ly = lineEl ? Math.round(parseFloat(lineEl.getAttribute('y2'))) : y;
+
+    const block = group.querySelector('.dot-text-block');
+    const transform = block ? block.style.transform : 'translate(16px, -8px)';
+    const match = transform.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
+    const tx = match ? Math.round(parseFloat(match[1])) : 16;
+    const ty = match ? Math.round(parseFloat(match[2])) : -8;
+
+    const nameEl = group.querySelector('.dot-label');
+    const n = nameEl ? nameEl.textContent.trim() : '';
+
+    // Altitude widget — short keys
+    const altWidget = group.querySelector('.alt-widget');
+    let a = null;
+    if (altWidget) {
+      const nums = altWidget.querySelectorAll('.alt-num');
+      const symEl = altWidget.querySelector('.alt-sym');
+      const symText = symEl ? [...symEl.childNodes].find(nd => nd.nodeType === 3) : null;
+      a = {
+        l: nums[0] ? nums[0].textContent.trim() : '',
+        s: symText ? symText.nodeValue : 'C',
+        r: nums[1] ? nums[1].textContent.trim() : '',
+        v: nums[1] ? (nums[1].style.display !== 'none' ? 1 : 0) : 0
+      };
+    }
+
+    // Sublabels — short keys, skip empty
+    const sl = [];
+    group.querySelectorAll('.dot-sublabel, .dot-sublabel2, .dot-sublabel3').forEach(el => {
+      if (!el.querySelector('.alt-widget')) {
+        const t = el.textContent.trim();
+        if (t) sl.push(t);
+      }
+    });
+
+    // Only include non-default values
+    const entry = { x, y, lx, ly, n };
+    if (tx !== 16 || ty !== -8) { entry.tx = tx; entry.ty = ty; }
+    if (a) entry.a = a;
+    if (sl.length) entry.sl = sl;
+    dots.push(entry);
+  });
+  return JSON.stringify(dots);
+}
+
+async function shareLayout() {
+  const json = serializeLayout();
+  const code = await compress(json);
+  const out = document.getElementById('share-output');
+  const input = document.getElementById('share-code');
+  out.style.display = 'flex';
+  input.value = code;
+  input.select();
+  document.getElementById('load-input-row').style.display = 'none';
+}
+
+async function loadLayout() {
+  const raw = document.getElementById('load-code').value.trim();
+  const err = document.getElementById('load-error');
+  if (err) err.remove();
+
+  let dots;
+  try {
+    const json = await decompress(raw);
+    dots = JSON.parse(json);
+    if (!Array.isArray(dots)) throw new Error();
+  } catch {
+    // Fallback: try old uncompressed format
+    try {
+      dots = JSON.parse(decodeURIComponent(escape(atob(raw))));
+      if (!Array.isArray(dots)) throw new Error();
+    } catch {
+      const errEl = document.createElement('div');
+      errEl.id = 'load-error';
+      errEl.textContent = 'Invalid code.';
+      document.getElementById('load-input-row').insertAdjacentElement('afterend', errEl);
+      return;
+    }
+  }
+
+  clearAll();
+  const canvas = document.getElementById('canvas');
+
+  dots.forEach(d => {
+    const dotId = 'dot-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+    const x = d.x, y = d.y;
+    const lx = d.lx ?? d.lx2 ?? x + 100;
+    const ly = d.ly ?? d.ly2 ?? y;
+    const tx = d.tx ?? 16;
+    const ty = d.ty ?? -8;
+    const name = d.n ?? d.name ?? '';
+    const altData = d.a ?? (d.altData ? {
+      l: d.altData.left, s: d.altData.sym, r: d.altData.right, v: d.altData.rightVisible ? 1 : 0
+    } : null);
+    const sublabels = d.sl ?? (d.sublabels ? d.sublabels.map(s => s.text ?? s) : []);
+
+    addCustomLine(x, y, lx, ly, dotId);
+
+    const group = document.createElement('div');
+    group.className = 'dot-group custom-dot';
+    group.style.left = x + 'px';
+    group.style.top  = y + 'px';
+    group.dataset.dotId = dotId;
+
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    dot.style.cursor = 'grab';
+    group.appendChild(dot);
+    setupDotDrag(dot, group, dotId);
+
+    const textBlock = makeDraggableTextBlock(tx, ty);
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'dot-label';
+    nameEl.textContent = name;
+    makeEditableSpan(nameEl);
+    textBlock.appendChild(nameEl);
+
+    if (altData) {
+      const altEl = document.createElement('span');
+      altEl.className = 'dot-sublabel';
+      const widget = makeAltitudeWidget(altData.l + altData.s);
+      const nums = widget.querySelectorAll('.alt-num');
+      const symEl = widget.querySelector('.alt-sym');
+      const symNode = symEl ? [...symEl.childNodes].find(nd => nd.nodeType === 3) : null;
+      if (nums[1]) { nums[1].textContent = altData.r; nums[1].style.display = altData.v ? 'inline' : 'none'; }
+      if (symNode) symNode.nodeValue = altData.s;
+      altEl.appendChild(widget);
+      textBlock.appendChild(altEl);
+    }
+
+    sublabels.forEach((t, i) => {
+      const el = document.createElement('span');
+      el.className = i === 0 && !altData ? 'dot-sublabel' : i === 0 ? 'dot-sublabel2' : 'dot-sublabel' + (i + 1);
+      el.textContent = t;
+      makeEditableSpan(el);
+      textBlock.appendChild(el);
+    });
+
+    group.appendChild(textBlock);
+    canvas.appendChild(group);
+  });
+
+  document.getElementById('load-input-row').style.display = 'none';
+  document.getElementById('load-code').value = '';
+}
+
+function copyCode() {
+  const input = document.getElementById('share-code');
+  input.select();
+  navigator.clipboard.writeText(input.value).catch(() => {
+    document.execCommand('copy');
+  });
+  const btn = document.getElementById('copy-btn');
+  btn.textContent = 'Copied!';
+  setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+}
+
+function toggleLoadInput() {
+  const row = document.getElementById('load-input-row');
+  const isOpen = row.style.display === 'flex';
+  row.style.display = isOpen ? 'none' : 'flex';
+  document.getElementById('share-output').style.display = 'none';
+  const err = document.getElementById('load-error');
+  if (err) err.remove();
+}
 
 // ─────────────────────────────────────────────────────────────
 
@@ -1132,4 +1352,7 @@ document.getElementById('canvas').addEventListener('touchend', (e) => {
                   target: el, stopPropagation: () => {}, preventDefault: () => {} });
 }, { passive: false });
 
-init();
+init().then(() => {
+  // Start in custom mode by default
+  toggleCustomMode();
+});
