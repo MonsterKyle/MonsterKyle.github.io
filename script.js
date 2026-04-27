@@ -1398,11 +1398,13 @@ function serializeLayout() {
 }
 
 async function shareLayout() {
-  // Use binary packing + deflate + base64
   const packed = packLayout();
   const compressed = await compressBytes(packed);
-  // Prefix with 'b' to distinguish from JSON-based format
   const code = 'b' + btoa(String.fromCharCode(...compressed));
+
+  // Update URL hash so the link is shareable directly
+  history.replaceState(null, '', '#' + code);
+
   const out = document.getElementById('share-output');
   const input = document.getElementById('share-code');
   out.style.display = 'flex';
@@ -1411,20 +1413,15 @@ async function shareLayout() {
   document.getElementById('load-input-row').style.display = 'none';
 }
 
-async function loadLayout() {
-  const raw = document.getElementById('load-code').value.trim();
-  const err = document.getElementById('load-error');
-  if (err) err.remove();
-
+// Load a layout from a raw code string (used by URL hash auto-load and load button)
+async function loadFromCode(raw) {
   let dots;
   try {
     if (raw.startsWith('b')) {
-      // New binary format
       const bytes = Uint8Array.from(atob(raw.slice(1)), c => c.charCodeAt(0));
       const decompressed = await decompressBytes(bytes);
       dots = unpackLayout(decompressed);
     } else {
-      // Legacy JSON+deflate format
       const json = await decompress(raw);
       dots = JSON.parse(json);
     }
@@ -1434,26 +1431,20 @@ async function loadLayout() {
       dots = JSON.parse(decodeURIComponent(escape(atob(raw))));
       if (!Array.isArray(dots)) throw new Error();
     } catch {
-      const errEl = document.createElement('div');
-      errEl.id = 'load-error';
-      errEl.textContent = 'Invalid code.';
-      document.getElementById('load-input-row').insertAdjacentElement('afterend', errEl);
-      return;
+      return false; // signal failure
     }
   }
 
   clearAll();
   const canvas = document.getElementById('canvas');
-
   dots.forEach(d => {
     const dotId = 'dot-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
-    const x  = d.x, y = d.y;
+    const x = d.x, y = d.y;
     const lx = d.lx ?? d.lx2 ?? x + 100;
     const ly = d.ly ?? d.ly2 ?? y;
-    const tx = d.tx ?? 16;
-    const ty = d.ty ?? -8;
-    const name     = d.n ?? d.name ?? '';
-    const altData  = d.a ?? (d.altData ? {
+    const tx = d.tx ?? 16, ty = d.ty ?? -8;
+    const name = d.n ?? d.name ?? '';
+    const altData = d.a ?? (d.altData ? {
       l: d.altData.left, s: d.altData.sym, r: d.altData.right, v: d.altData.rightVisible ? 1 : 0
     } : null);
     const sublabels = d.sl ?? (d.sublabels ? d.sublabels.map(s => s.text ?? s) : []);
@@ -1473,7 +1464,6 @@ async function loadLayout() {
     setupDotDrag(dot, group, dotId);
 
     const textBlock = makeDraggableTextBlock(tx, ty);
-
     const nameEl = document.createElement('span');
     nameEl.className = 'dot-label';
     nameEl.textContent = name;
@@ -1484,8 +1474,8 @@ async function loadLayout() {
       const altEl = document.createElement('span');
       altEl.className = 'dot-sublabel';
       const widget = makeAltitudeWidget(altData.l + altData.s);
-      const nums   = widget.querySelectorAll('.alt-num');
-      const symEl  = widget.querySelector('.alt-sym');
+      const nums = widget.querySelectorAll('.alt-num');
+      const symEl = widget.querySelector('.alt-sym');
       const symNode = symEl ? [...symEl.childNodes].find(nd => nd.nodeType === 3) : null;
       if (nums[1]) { nums[1].textContent = altData.r; nums[1].style.display = altData.v ? 'inline' : 'none'; }
       if (symNode) symNode.nodeValue = altData.s;
@@ -1504,6 +1494,31 @@ async function loadLayout() {
     group.appendChild(textBlock);
     canvas.appendChild(group);
   });
+  return true;
+}
+
+
+async function loadLayout() {
+  let raw = document.getElementById('load-code').value.trim();
+  const err = document.getElementById('load-error');
+  if (err) err.remove();
+
+  // If a full URL is pasted, extract the hash fragment
+  try {
+    const url = new URL(raw);
+    if (url.hash) raw = url.hash.slice(1);
+  } catch { /* not a URL, use as-is */ }
+
+  const ok = await loadFromCode(raw);
+  if (!ok) {
+    const errEl = document.createElement('div');
+    errEl.id = 'load-error';
+    errEl.textContent = 'Invalid code.';
+    document.getElementById('load-input-row').insertAdjacentElement('afterend', errEl);
+    return;
+  }
+
+  history.replaceState(null, '', '#' + raw);
   document.getElementById('load-input-row').style.display = 'none';
   document.getElementById('load-code').value = '';
 }
@@ -1516,7 +1531,22 @@ function copyCode() {
   });
   const btn = document.getElementById('copy-btn');
   btn.textContent = 'Copied!';
-  setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+  setTimeout(() => { btn.textContent = 'Copy Code'; }, 1500);
+}
+
+function copyURL() {
+  const url = window.location.href;
+  navigator.clipboard.writeText(url).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  });
+  const btn = document.getElementById('copy-url-btn');
+  btn.textContent = 'Copied!';
+  setTimeout(() => { btn.textContent = 'Copy URL'; }, 1500);
 }
 
 function toggleLoadInput() {
@@ -1622,7 +1652,12 @@ document.getElementById('canvas').addEventListener('touchend', (e) => {
                   target: el, stopPropagation: () => {}, preventDefault: () => {} });
 }, { passive: false });
 
-init().then(() => {
+init().then(async () => {
   // Start in custom mode by default
   toggleCustomMode();
+  // Auto-load from URL hash if present
+  const hash = window.location.hash.slice(1);
+  if (hash) {
+    await loadFromCode(hash);
+  }
 });
