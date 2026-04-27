@@ -12,6 +12,7 @@
     <button id="generate-btn" onclick="generate()" style="display:none;">Generate</button>
     <!-- <button id="custom-btn" onclick="toggleCustomMode()">Custom Mode</button> -->
     <button id="clear-btn" onclick="clearAll()">Clear All</button>
+    <button id="place-toggle-btn" onclick="togglePlacing()">Placing: ON</button>
     <div id="normal-options" style="display:none; flex-direction:column; gap:10px;">
       <label id="kgwo-label">
         <input type="checkbox" id="kgwo-checkbox" />
@@ -56,7 +57,7 @@
   <!-- Share/Load panel — bottom left -->
   <div id="share-panel">
     <div class="share-row">
-      <button id="load-btn" onclick="toggleLoadInput()">Load</button>
+      <button id="load-btn" onclick="toggleLoadInput()">Load Code</button>
       <div id="load-input-row" style="display:none;">
         <input id="load-code" type="text" placeholder="Paste code here" />
         <button id="load-submit-btn" onclick="loadLayout()">Load</button>
