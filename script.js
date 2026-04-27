@@ -30,11 +30,42 @@ const SUBLABELS = ['VA', 'VA RWY5'];
 
 // Custom mode state
 let customModeActive = false;
-let customClickStep = 0;   // 0 = waiting for dot click, 1 = waiting for line end click
+let customClickStep = 0;
 let customDotX = 0;
 let customDotY = 0;
 let customDotName = '';
 let ghostDotEl = null;
+let placingEnabled = true;
+
+function togglePlacing() {
+  placingEnabled = !placingEnabled;
+  const btn = document.getElementById('place-toggle-btn');
+  if (placingEnabled) {
+    btn.textContent = 'Placing: ON';
+    btn.classList.remove('placing-off');
+    document.body.classList.remove('placing-off');
+    document.getElementById('canvas').style.cursor = 'crosshair';
+    document.getElementById('custom-hint').textContent = 'Click to place a dot';
+    document.getElementById('custom-hint').style.display = 'block';
+    // Shrink line handles back to normal
+    document.querySelectorAll('.line-handle').forEach(h => {
+      h.setAttribute('r', '6');
+    });
+  } else {
+    btn.textContent = 'Placing: OFF';
+    btn.classList.add('placing-off');
+    document.body.classList.add('placing-off');
+    document.getElementById('canvas').style.cursor = 'default';
+    document.getElementById('custom-hint').style.display = 'none';
+    // Enlarge line handles for easier grabbing
+    document.querySelectorAll('.line-handle').forEach(h => {
+      h.setAttribute('r', '14');
+    });
+    // Cancel any in-progress placement
+    removeGhost();
+    customClickStep = 0;
+  }
+}
 
 function loadImage(src, canvasId) {
   return new Promise((resolve) => {
@@ -820,7 +851,7 @@ function addCustomLine(x1, y1, x2, y2, dotId) {
   const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
   handle.setAttribute('cx', x2);
   handle.setAttribute('cy', y2);
-  handle.setAttribute('r', 6);
+  handle.setAttribute('r', placingEnabled ? '6' : '14');
   handle.setAttribute('fill', '#FFE033');
   handle.setAttribute('fill-opacity', '0.01');
   handle.setAttribute('stroke', '#FFE033');
@@ -939,6 +970,7 @@ function setupDotDrag(dot, group, dotId) {
 
 function onCustomClick(e) {
   if (!customModeActive) return;
+  if (!placingEnabled) return;
   if (altDropdownInteracting) return;
   const { x, y } = getEventPos(e);
   const hint = document.getElementById('custom-hint');
@@ -1041,8 +1073,41 @@ document.getElementById('canvas').addEventListener('click', (e) => {
 // ── Share / Load ──────────────────────────────────────────────
 
 // Compress bytes using DeflateRaw, return base64 string
-async function compress(str) {
-  const bytes = new TextEncoder().encode(str);
+// ── Compression ───────────────────────────────────────────────
+// Base85 (ASCII85 variant) — 20% denser than Base64
+const B85 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~';
+function toBase85(bytes) {
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 4) {
+    let v = 0, n = 0;
+    for (let j = 0; j < 4; j++) {
+      v = v * 256 + (i + j < bytes.length ? bytes[i + j] : 0);
+      if (i + j < bytes.length) n++;
+    }
+    const chars = [];
+    for (let j = 0; j < 5; j++) { chars.unshift(B85[v % 85]); v = Math.floor(v / 85); }
+    out += chars.slice(0, n + 1).join('');
+  }
+  return out;
+}
+function fromBase85(str) {
+  const out = [];
+  let i = 0;
+  while (i < str.length) {
+    let v = 0, n = Math.min(5, str.length - i);
+    for (let j = 0; j < 5; j++) {
+      v = v * 85 + (j < n ? B85.indexOf(str[i + j]) : 84);
+    }
+    for (let j = 3; j >= 0; j--) { if (j < n - 1) out.push((v >> (j * 8)) & 0xff); v = v; }
+    // correct byte extraction
+    const bytes4 = [(v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff];
+    out.splice(out.length - (n - 1), n - 1, ...bytes4.slice(0, n - 1));
+    i += n;
+  }
+  return new Uint8Array(out);
+}
+
+async function compressBytes(bytes) {
   const cs = new CompressionStream('deflate-raw');
   const writer = cs.writable.getWriter();
   writer.write(bytes);
@@ -1058,12 +1123,10 @@ async function compress(str) {
   const out = new Uint8Array(total);
   let offset = 0;
   for (const c of chunks) { out.set(c, offset); offset += c.length; }
-  return btoa(String.fromCharCode(...out));
+  return out;
 }
 
-// Decompress base64 string back to original string
-async function decompress(b64) {
-  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+async function decompressBytes(bytes) {
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
   writer.write(bytes);
@@ -1079,55 +1142,252 @@ async function decompress(b64) {
   const out = new Uint8Array(total);
   let offset = 0;
   for (const c of chunks) { out.set(c, offset); offset += c.length; }
-  return new TextDecoder().decode(out);
+  return out;
+}
+
+// Binary buffer writer/reader
+function makeBuf() {
+  const data = [];
+  return {
+    u16(v) { data.push((v >> 8) & 0xff, v & 0xff); },
+    i16(v) { const u = v < 0 ? v + 65536 : v; data.push((u >> 8) & 0xff, u & 0xff); },
+    u8(v)  { data.push(v & 0xff); },
+    str(s) { const e = new TextEncoder().encode(s); data.push(e.length, ...e); },
+    bytes() { return new Uint8Array(data); }
+  };
+}
+function makeReader(bytes) {
+  let p = 0;
+  return {
+    u16()   { return (bytes[p++] << 8) | bytes[p++]; },
+    i16()   { const v = (bytes[p++] << 8) | bytes[p++]; return v > 32767 ? v - 65536 : v; },
+    u8()    { return bytes[p++]; },
+    peekU8(){ return bytes[p]; },
+    str()   { const len = bytes[p++]; return new TextDecoder().decode(bytes.slice(p, p += len)); },
+    done()  { return p >= bytes.length; }
+  };
+}
+
+// ── Preset tables for ultra-compact encoding ──────────────────
+// Known sublabel strings → single byte index
+const SUBL_PRESETS = ['KXXX','0M8','KGWO','VA','VA RWY5','RWY5'];
+// Alt multiples of 10 from 0-240 → index (0-24)
+const ALT_VALS = Array.from({length:25}, (_,i) => String(i*10));
+const SYM_CHARS = ['C','B','↑','↓','T'];
+const LETTERS26 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const DIGITS10   = '0123456789';
+
+// Pack a name string.
+// Standard N + 2-3 digits + 1-2 letters:
+//   byte0: 0x80 | (numLetters-1)<<5 | upper5bits(digits)
+//   byte1: lower5bits(digits)<<3 | upper3bits(l0)
+//   byte2: lower2bits(l0)<<6 | l1 (0=none, 1-26)
+// This handles digits 0-999 (10 bits) and l0 0-25 (5 bits) cleanly.
+function packName(buf, name) {
+  const m = name.match(/^N(\d{2,3})([A-Z]{1,2})$/);
+  if (m) {
+    const digits = parseInt(m[1], 10);  // 0-999, 10 bits
+    const lets   = m[2];
+    const l0 = LETTERS26.indexOf(lets[0]);          // 0-25, 5 bits
+    const l1 = lets.length > 1 ? LETTERS26.indexOf(lets[1]) + 1 : 0; // 0=none, 1-26, 5 bits
+    const nl = lets.length - 1; // 0 or 1
+
+    // digits: 10 bits → split as upper5 | lower5
+    const dHi = (digits >> 5) & 0x1F;
+    const dLo = digits & 0x1F;
+    // l0: 5 bits → split as upper3 | lower2
+    const l0Hi = (l0 >> 2) & 0x07;
+    const l0Lo = l0 & 0x03;
+
+    buf.u8(0x80 | (nl << 5) | dHi);
+    buf.u8((dLo << 3) | l0Hi);
+    buf.u8((l0Lo << 6) | l1);
+    return;
+  }
+  buf.str(name);
+}
+
+function unpackName(r) {
+  const b0 = r.peekU8();
+  if (b0 & 0x80) {
+    r.u8();
+    const b1 = r.u8();
+    const b2 = r.u8();
+    const nl   = (b0 >> 5) & 1;
+    const dHi  = b0 & 0x1F;
+    const dLo  = (b1 >> 3) & 0x1F;
+    const l0Hi = b1 & 0x07;
+    const l0Lo = (b2 >> 6) & 0x03;
+    const l1   = b2 & 0x3F;
+
+    const digits = (dHi << 5) | dLo;
+    const l0     = (l0Hi << 2) | l0Lo;
+
+    let name = 'N' + digits + LETTERS26[l0];
+    if (nl) name += LETTERS26[l1 - 1];
+    return name;
+  }
+  return r.str();
+}
+
+// Pack altitude number — if it's a multiple of 10 in 0-240, use 1-byte index
+// otherwise raw string. Returns true if packed as index.
+function packAltNum(buf, s) {
+  const v = parseInt(s, 10);
+  const idx = ALT_VALS.indexOf(String(v));
+  if (idx >= 0 && String(v) === s) {
+    buf.u8(0x80 | idx); // high bit = indexed
+    return;
+  }
+  buf.str(s); // raw (high bit won't be set since len byte < 0x80)
+}
+
+function unpackAltNum(r) {
+  const b = r.peekU8();
+  if (b & 0x80) { r.u8(); return ALT_VALS[b & 0x7F]; }
+  return r.str();
+}
+
+// Encode layout as compact binary
+function packLayout() {
+  const buf = makeBuf();
+  const groups = [...document.querySelectorAll('.custom-dot')];
+  buf.u8(groups.length);
+  groups.forEach(group => {
+    const dotId = group.dataset.dotId;
+    const x  = Math.round(parseFloat(group.style.left));
+    const y  = Math.round(parseFloat(group.style.top));
+    const lineEl = document.querySelector(`.custom-line[data-dot-id="${dotId}"]`);
+    const lx = lineEl ? Math.round(parseFloat(lineEl.getAttribute('x2'))) : x + 100;
+    const ly = lineEl ? Math.round(parseFloat(lineEl.getAttribute('y2'))) : y;
+    const block = group.querySelector('.dot-text-block');
+    const transform = block ? block.style.transform : 'translate(16px, -8px)';
+    const match = transform.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
+    const tx = match ? Math.round(parseFloat(match[1])) : 16;
+    const ty = match ? Math.round(parseFloat(match[2])) : -8;
+    const nameEl = group.querySelector('.dot-label');
+    const name = nameEl ? nameEl.textContent.trim() : '';
+    const altWidget = group.querySelector('.alt-widget');
+    const sublabels = [];
+    group.querySelectorAll('.dot-sublabel,.dot-sublabel2,.dot-sublabel3').forEach(el => {
+      if (!el.querySelector('.alt-widget')) { const t = el.textContent.trim(); if (t) sublabels.push(t); }
+    });
+
+    // Coordinates: x,y,lx,ly as u16; tx,ty as i16 only if non-default
+    buf.u16(x); buf.u16(y); buf.u16(lx); buf.u16(ly);
+
+    // Flags: bit0=hasAlt, bit1=textMoved, bit2=hasSubl
+    const hasAlt    = altWidget ? 1 : 0;
+    const textMoved = (tx !== 16 || ty !== -8) ? 1 : 0;
+    const hasSubl   = sublabels.length > 0 ? 1 : 0;
+    buf.u8((hasSubl << 2) | (textMoved << 1) | hasAlt);
+
+    if (textMoved) { buf.i16(tx); buf.i16(ty); }
+
+    packName(buf, name);
+
+    if (hasAlt) {
+      const nums   = altWidget.querySelectorAll('.alt-num');
+      const symEl  = altWidget.querySelector('.alt-sym');
+      const symNode = symEl ? [...symEl.childNodes].find(n => n.nodeType === 3) : null;
+      const sym    = symNode ? symNode.nodeValue : 'C';
+      const symIdx = SYM_CHARS.indexOf(sym);
+      const rightVis = nums[1] && nums[1].style.display !== 'none' ? 1 : 0;
+      // Pack sym + rightVis in one byte: bits 0-2 = symIdx, bit3 = rightVis
+      buf.u8((rightVis << 3) | (symIdx < 0 ? 0 : symIdx));
+      packAltNum(buf, nums[0] ? nums[0].textContent.trim() : '0');
+      packAltNum(buf, nums[1] ? nums[1].textContent.trim() : '0');
+    }
+
+    if (hasSubl) {
+      buf.u8(sublabels.length);
+      sublabels.forEach(s => {
+        const pi = SUBL_PRESETS.indexOf(s);
+        if (pi >= 0) { buf.u8(0x80 | pi); } // preset index
+        else         { buf.str(s); }          // raw string
+      });
+    }
+  });
+  return buf.bytes();
+}
+
+function unpackLayout(bytes) {
+  const r = makeReader(bytes);
+  const dots = [];
+  const count = r.u8();
+  for (let i = 0; i < count; i++) {
+    const x = r.u16(), y = r.u16(), lx = r.u16(), ly = r.u16();
+    const flags     = r.u8();
+    const hasAlt    = flags & 1;
+    const textMoved = (flags >> 1) & 1;
+    const hasSubl   = (flags >> 2) & 1;
+    const tx = textMoved ? r.i16() : 16;
+    const ty = textMoved ? r.i16() : -8;
+    const name = unpackName(r);
+    let a = null;
+    if (hasAlt) {
+      const symByte  = r.u8();
+      const symIdx   = symByte & 0x7;
+      const rightVis = (symByte >> 3) & 1;
+      const leftStr  = unpackAltNum(r);
+      const rightStr = unpackAltNum(r);
+      a = { l: leftStr, s: SYM_CHARS[symIdx] || 'C', r: rightStr, v: rightVis };
+    }
+    const sl = [];
+    if (hasSubl) {
+      const n = r.u8();
+      for (let j = 0; j < n; j++) {
+        const b = r.peekU8();
+        if (b & 0x80) { r.u8(); sl.push(SUBL_PRESETS[b & 0x7F] || ''); }
+        else           { sl.push(r.str()); }
+      }
+    }
+    dots.push({ x, y, lx, ly, tx, ty, n: name, a, sl });
+  }
+  return dots;
+}
+
+async function compress(str) {
+  const bytes = new TextEncoder().encode(str);
+  const compressed = await compressBytes(bytes);
+  return btoa(String.fromCharCode(...compressed));
+}
+
+async function decompress(b64) {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const decompressed = await decompressBytes(bytes);
+  return new TextDecoder().decode(decompressed);
 }
 
 function serializeLayout() {
   const dots = [];
   document.querySelectorAll('.custom-dot').forEach(group => {
     const dotId = group.dataset.dotId;
-    // Round to integers — sub-pixel accuracy not needed
     const x = Math.round(parseFloat(group.style.left));
     const y = Math.round(parseFloat(group.style.top));
-
     const lineEl = document.querySelector(`.custom-line[data-dot-id="${dotId}"]`);
     const lx = lineEl ? Math.round(parseFloat(lineEl.getAttribute('x2'))) : x + 100;
     const ly = lineEl ? Math.round(parseFloat(lineEl.getAttribute('y2'))) : y;
-
     const block = group.querySelector('.dot-text-block');
     const transform = block ? block.style.transform : 'translate(16px, -8px)';
     const match = transform.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
     const tx = match ? Math.round(parseFloat(match[1])) : 16;
     const ty = match ? Math.round(parseFloat(match[2])) : -8;
-
     const nameEl = group.querySelector('.dot-label');
     const n = nameEl ? nameEl.textContent.trim() : '';
-
-    // Altitude widget — short keys
     const altWidget = group.querySelector('.alt-widget');
     let a = null;
     if (altWidget) {
       const nums = altWidget.querySelectorAll('.alt-num');
       const symEl = altWidget.querySelector('.alt-sym');
       const symText = symEl ? [...symEl.childNodes].find(nd => nd.nodeType === 3) : null;
-      a = {
-        l: nums[0] ? nums[0].textContent.trim() : '',
-        s: symText ? symText.nodeValue : 'C',
-        r: nums[1] ? nums[1].textContent.trim() : '',
-        v: nums[1] ? (nums[1].style.display !== 'none' ? 1 : 0) : 0
-      };
+      a = { l: nums[0] ? nums[0].textContent.trim() : '', s: symText ? symText.nodeValue : 'C',
+            r: nums[1] ? nums[1].textContent.trim() : '', v: nums[1] ? (nums[1].style.display !== 'none' ? 1 : 0) : 0 };
     }
-
-    // Sublabels — short keys, skip empty
     const sl = [];
-    group.querySelectorAll('.dot-sublabel, .dot-sublabel2, .dot-sublabel3').forEach(el => {
-      if (!el.querySelector('.alt-widget')) {
-        const t = el.textContent.trim();
-        if (t) sl.push(t);
-      }
+    group.querySelectorAll('.dot-sublabel,.dot-sublabel2,.dot-sublabel3').forEach(el => {
+      if (!el.querySelector('.alt-widget')) { const t = el.textContent.trim(); if (t) sl.push(t); }
     });
-
-    // Only include non-default values
     const entry = { x, y, lx, ly, n };
     if (tx !== 16 || ty !== -8) { entry.tx = tx; entry.ty = ty; }
     if (a) entry.a = a;
@@ -1138,8 +1398,11 @@ function serializeLayout() {
 }
 
 async function shareLayout() {
-  const json = serializeLayout();
-  const code = await compress(json);
+  // Use binary packing + deflate + base64
+  const packed = packLayout();
+  const compressed = await compressBytes(packed);
+  // Prefix with 'b' to distinguish from JSON-based format
+  const code = 'b' + btoa(String.fromCharCode(...compressed));
   const out = document.getElementById('share-output');
   const input = document.getElementById('share-code');
   out.style.display = 'flex';
@@ -1155,11 +1418,18 @@ async function loadLayout() {
 
   let dots;
   try {
-    const json = await decompress(raw);
-    dots = JSON.parse(json);
+    if (raw.startsWith('b')) {
+      // New binary format
+      const bytes = Uint8Array.from(atob(raw.slice(1)), c => c.charCodeAt(0));
+      const decompressed = await decompressBytes(bytes);
+      dots = unpackLayout(decompressed);
+    } else {
+      // Legacy JSON+deflate format
+      const json = await decompress(raw);
+      dots = JSON.parse(json);
+    }
     if (!Array.isArray(dots)) throw new Error();
   } catch {
-    // Fallback: try old uncompressed format
     try {
       dots = JSON.parse(decodeURIComponent(escape(atob(raw))));
       if (!Array.isArray(dots)) throw new Error();
@@ -1177,13 +1447,13 @@ async function loadLayout() {
 
   dots.forEach(d => {
     const dotId = 'dot-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
-    const x = d.x, y = d.y;
+    const x  = d.x, y = d.y;
     const lx = d.lx ?? d.lx2 ?? x + 100;
     const ly = d.ly ?? d.ly2 ?? y;
     const tx = d.tx ?? 16;
     const ty = d.ty ?? -8;
-    const name = d.n ?? d.name ?? '';
-    const altData = d.a ?? (d.altData ? {
+    const name     = d.n ?? d.name ?? '';
+    const altData  = d.a ?? (d.altData ? {
       l: d.altData.left, s: d.altData.sym, r: d.altData.right, v: d.altData.rightVisible ? 1 : 0
     } : null);
     const sublabels = d.sl ?? (d.sublabels ? d.sublabels.map(s => s.text ?? s) : []);
@@ -1214,8 +1484,8 @@ async function loadLayout() {
       const altEl = document.createElement('span');
       altEl.className = 'dot-sublabel';
       const widget = makeAltitudeWidget(altData.l + altData.s);
-      const nums = widget.querySelectorAll('.alt-num');
-      const symEl = widget.querySelector('.alt-sym');
+      const nums   = widget.querySelectorAll('.alt-num');
+      const symEl  = widget.querySelector('.alt-sym');
       const symNode = symEl ? [...symEl.childNodes].find(nd => nd.nodeType === 3) : null;
       if (nums[1]) { nums[1].textContent = altData.r; nums[1].style.display = altData.v ? 'inline' : 'none'; }
       if (symNode) symNode.nodeValue = altData.s;
@@ -1234,7 +1504,6 @@ async function loadLayout() {
     group.appendChild(textBlock);
     canvas.appendChild(group);
   });
-
   document.getElementById('load-input-row').style.display = 'none';
   document.getElementById('load-code').value = '';
 }
@@ -1318,6 +1587,7 @@ document.getElementById('canvas').addEventListener('touchmove', (e) => {
 
 document.getElementById('canvas').addEventListener('touchend', (e) => {
   if (!customModeActive) return;
+  if (!placingEnabled) return;
   if (touchWasDrag) return;
   e.preventDefault();
 
