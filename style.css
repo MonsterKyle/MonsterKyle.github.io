@@ -304,6 +304,31 @@ html {
   color: #ff4444 !important;
 }
 
+/* When placing is OFF — larger, always-visible handles */
+body.placing-off .text-drag-handle {
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  right: -26px;
+  color: rgba(255, 224, 51, 0.6) !important;
+}
+
+body.placing-off .text-drag-handle:hover {
+  color: #FFE033 !important;
+}
+
+body.placing-off .dot-delete-btn {
+  width: 24px;
+  height: 24px;
+  font-size: 17px;
+  right: -52px;
+  color: rgba(255, 100, 100, 0.6) !important;
+}
+
+body.placing-off .dot-delete-btn:hover {
+  color: #ff4444 !important;
+}
+
 .dot-group .dot-text-block .dot-label {
   position: relative;
   display: block;
@@ -559,4 +584,46 @@ html {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+#place-toggle-btn {
+  padding: 11px 24px;
+  font-size: 15px;
+  font-weight: 700;
+  background: rgba(100, 220, 100, 0.2);
+  color: #fff;
+  border: 2px solid rgba(100, 220, 100, 0.7);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.45);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  letter-spacing: 0.03em;
+}
+
+#place-toggle-btn:hover {
+  background: rgba(100, 220, 100, 0.35);
+}
+
+#place-toggle-btn.placing-off {
+  background: rgba(220, 80, 80, 0.2);
+  border-color: rgba(220, 80, 80, 0.7);
+}
+
+#place-toggle-btn.placing-off:hover {
+  background: rgba(220, 80, 80, 0.35);
+}
+
+#place-toggle-btn:active {
+  transform: scale(0.97);
+}
+
+/* Line handle — larger and always visible when placing is OFF */
+body.placing-off #line-overlay .line-handle {
+  stroke-opacity: 0.6 !important;
+  fill-opacity: 0.15 !important;
+}
+
+body.placing-off #line-overlay .line-handle:hover {
+  stroke-opacity: 1 !important;
+  fill-opacity: 0.3 !important;
 }
