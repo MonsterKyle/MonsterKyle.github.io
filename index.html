@@ -59,7 +59,7 @@
     <div class="share-row">
       <button id="load-btn" onclick="toggleLoadInput()">Load Code</button>
       <div id="load-input-row" style="display:none;">
-        <input id="load-code" type="text" placeholder="Paste code here" />
+        <input id="load-code" type="text" placeholder="Paste code/URL here" />
         <button id="load-submit-btn" onclick="loadLayout()">Load</button>
       </div>
     </div>
@@ -67,7 +67,8 @@
       <button id="share-btn" onclick="shareLayout()">Share</button>
       <div id="share-output" style="display:none;">
         <input id="share-code" type="text" readonly />
-        <button id="copy-btn" onclick="copyCode()">Copy</button>
+        <button id="copy-btn" onclick="copyCode()">Copy Code</button>
+        <button id="copy-url-btn" onclick="copyURL()">Copy URL</button>
       </div>
     </div>
   </div>
