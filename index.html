@@ -11,7 +11,11 @@
   <div id="controls">
     <button id="generate-btn" onclick="generate()" style="display:none;">Generate</button>
     <!-- <button id="custom-btn" onclick="toggleCustomMode()">Custom Mode</button> -->
-    <button id="clear-btn" onclick="clearAll()">Clear All</button>
+    <div id="clear-undo-row">
+      <button id="clear-btn" onclick="clearAll()">Clear All</button>
+      <button id="undo-btn" onclick="undo()" title="Undo">&#8592;</button>
+      <button id="redo-btn" onclick="redo()" title="Redo">&#8594;</button>
+    </div>
     <button id="place-toggle-btn" onclick="togglePlacing()">Placing: ON</button>
     <div id="normal-options" style="display:none; flex-direction:column; gap:10px;">
       <label id="kgwo-label">
