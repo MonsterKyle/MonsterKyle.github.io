@@ -644,3 +644,66 @@ body.placing-off #line-overlay .line-handle:hover {
 #copy-url-btn:hover {
   background: rgba(255, 224, 51, 0.3);
 }
+
+#undo-btn {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  background: transparent;
+  color: #fff;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.45);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  letter-spacing: 0.03em;
+}
+
+#undo-btn:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.7);
+}
+
+#undo-btn:active {
+  transform: scale(0.97);
+}
+
+#undo-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+#clear-undo-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+#redo-btn {
+  padding: 7px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  background: transparent;
+  color: #fff;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.45);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  letter-spacing: 0.03em;
+}
+
+#redo-btn:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.7);
+}
+
+#redo-btn:active {
+  transform: scale(0.97);
+}
+
+#redo-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
