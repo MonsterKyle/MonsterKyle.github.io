@@ -167,7 +167,8 @@ html {
   z-index: 60;
 }
 
-#custom-alt-select {
+#custom-alt-select,
+#landing-select {
   background: rgba(0,0,0,0.6);
   color: #fff;
   border: 1px solid rgba(255,255,255,0.4);
@@ -179,7 +180,8 @@ html {
   accent-color: #FFE033;
 }
 
-#custom-alt-select:focus {
+#custom-alt-select:focus,
+#landing-select:focus {
   outline: none;
   border-color: #FFE033;
 }
@@ -706,4 +708,21 @@ body.placing-off #line-overlay .line-handle:hover {
 #redo-btn:disabled {
   opacity: 0.3;
   cursor: default;
+}
+
+#landing-custom-input {
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: text;
+  width: 70px;
+  outline: none;
+}
+
+#landing-custom-input:focus {
+  border-color: #FFE033;
 }
