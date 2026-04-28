@@ -37,6 +37,99 @@ let customDotName = '';
 let ghostDotEl = null;
 let placingEnabled = true;
 
+// ── Undo / Redo history ───────────────────────────────────────
+const MAX_UNDO = 100;
+const undoStack = [];
+const redoStack = [];
+
+function snapshotForUndo() {
+  const snap = packLayout();
+  undoStack.push(snap);
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  // Any new action clears redo history
+  redoStack.length = 0;
+  document.getElementById('undo-btn').disabled = false;
+  document.getElementById('redo-btn').disabled = true;
+}
+
+async function restoreSnapshot(snap) {
+  document.querySelectorAll('.dot-group').forEach(el => el.remove());
+  clearSVG();
+
+  if (snap.length === 0) return;
+
+  const dots = unpackLayout(snap);
+  const canvas = document.getElementById('canvas');
+  dots.forEach(d => {
+    const dotId = 'dot-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+    addCustomLine(d.x, d.y, d.lx, d.ly, dotId);
+
+    const group = document.createElement('div');
+    group.className = 'dot-group custom-dot';
+    group.style.left = d.x + 'px';
+    group.style.top  = d.y + 'px';
+    group.dataset.dotId = dotId;
+
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    dot.style.cursor = 'grab';
+    group.appendChild(dot);
+    setupDotDrag(dot, group, dotId);
+
+    const textBlock = makeDraggableTextBlock(d.tx, d.ty);
+    const nameEl = document.createElement('span');
+    nameEl.className = 'dot-label';
+    nameEl.textContent = d.n;
+    makeEditableSpan(nameEl);
+    textBlock.appendChild(nameEl);
+
+    if (d.a) {
+      const altEl = document.createElement('span');
+      altEl.className = 'dot-sublabel';
+      const widget = makeAltitudeWidget(d.a.l + d.a.s);
+      const nums = widget.querySelectorAll('.alt-num');
+      const symEl = widget.querySelector('.alt-sym');
+      const symNode = symEl ? [...symEl.childNodes].find(n => n.nodeType === 3) : null;
+      if (nums[1]) { nums[1].textContent = d.a.r; nums[1].style.display = d.a.v ? 'inline' : 'none'; }
+      if (symNode) symNode.nodeValue = d.a.s;
+      altEl.appendChild(widget);
+      textBlock.appendChild(altEl);
+    }
+
+    (d.sl || []).forEach((t, i) => {
+      const el = document.createElement('span');
+      el.className = i === 0 && !d.a ? 'dot-sublabel' : i === 0 ? 'dot-sublabel2' : 'dot-sublabel' + (i + 1);
+      el.textContent = t;
+      makeEditableSpan(el);
+      textBlock.appendChild(el);
+    });
+
+    group.appendChild(textBlock);
+    canvas.appendChild(group);
+  });
+}
+
+async function undo() {
+  if (undoStack.length === 0) return;
+  // Push current state to redo stack before restoring
+  redoStack.push(packLayout());
+  const snap = undoStack.pop();
+  await restoreSnapshot(snap);
+  document.getElementById('undo-btn').disabled = undoStack.length === 0;
+  document.getElementById('redo-btn').disabled = false;
+}
+
+async function redo() {
+  if (redoStack.length === 0) return;
+  // Push current state to undo stack before restoring
+  undoStack.push(packLayout());
+  const snap = redoStack.pop();
+  await restoreSnapshot(snap);
+  document.getElementById('undo-btn').disabled = false;
+  document.getElementById('redo-btn').disabled = redoStack.length === 0;
+}
+// ─────────────────────────────────────────────────────────────
+
 function togglePlacing() {
   placingEnabled = !placingEnabled;
   const btn = document.getElementById('place-toggle-btn');
@@ -304,6 +397,7 @@ function makeDraggableTextBlock(initialOffsetX, initialOffsetY) {
 
   deleteBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    snapshotForUndo();
     // Find parent dot-group and its dotId
     const group = block.closest('.dot-group');
     if (!group) return;
@@ -342,6 +436,8 @@ function makeDraggableTextBlock(initialOffsetX, initialOffsetY) {
     const startY = e.clientY / scale;
     const origX = offsetX;
     const origY = offsetY;
+    snapshotForUndo();
+    let moved = false;
 
     function onMove(ev) {
       const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
@@ -356,10 +452,15 @@ function makeDraggableTextBlock(initialOffsetX, initialOffsetY) {
       offsetX = nx;
       offsetY = ny;
       block.style.transform = `translate(${nx}px, ${ny}px)`;
+      moved = true;
     }
 
     function onUp() {
       handle.style.cursor = 'grab';
+      if (!moved) {
+        undoStack.pop();
+        document.getElementById('undo-btn').disabled = undoStack.length === 0;
+      }
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       window.removeEventListener('touchmove', onMove);
@@ -380,8 +481,9 @@ function makeEditableSpan(el) {
   el.style.cursor = 'text';
   el.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (el.querySelector('input')) return; // already editing
+    if (el.querySelector('input')) return;
     const current = el.textContent;
+    snapshotForUndo(); // snapshot before editing begins, while text is still intact
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'alt-num-input';
@@ -393,12 +495,21 @@ function makeEditableSpan(el) {
     input.select();
 
     function commit() {
-      el.textContent = input.value.trim() || current;
+      const val = input.value.trim() || current;
+      el.textContent = val;
+      // If unchanged, remove the snapshot we just pushed (no-op undo step)
+      if (val === current && undoStack.length > 0) undoStack.pop();
+      document.getElementById('undo-btn').disabled = undoStack.length === 0;
     }
     input.addEventListener('blur', commit);
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); commit(); input.blur(); }
-      if (e.key === 'Escape') { el.textContent = current; }
+      if (e.key === 'Escape') {
+        el.textContent = current;
+        // Discard snapshot since we cancelled
+        if (undoStack.length > 0) undoStack.pop();
+        document.getElementById('undo-btn').disabled = undoStack.length === 0;
+      }
       e.stopPropagation();
     });
     input.addEventListener('click', e => e.stopPropagation());
@@ -692,6 +803,7 @@ function makeAltitudeWidget(altText) {
         if (rightVal > leftVal)  chosen = '↑';
         if (rightVal < leftVal)  chosen = '↓';
       }
+      snapshotForUndo();
       symText.nodeValue = chosen;
       numRight.style.display = chosen === 'C' ? 'none' : 'inline';
       dropdown.style.display = 'none';
@@ -732,6 +844,7 @@ function makeAltitudeWidget(altText) {
   numRight.addEventListener('click', (e) => {
     e.stopPropagation();
     const current = numRight.textContent;
+    snapshotForUndo(); // snapshot before editing begins
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'alt-num-input';
@@ -744,7 +857,10 @@ function makeAltitudeWidget(altText) {
     function commitRight() {
       const val = input.value.trim() || current;
       numRight.textContent = val;
-      // Auto-correct arrow if symbol is ↑ or ↓
+      if (val === current && undoStack.length > 0) {
+        undoStack.pop();
+        document.getElementById('undo-btn').disabled = undoStack.length === 0;
+      }
       const curSym = symText.nodeValue;
       if (curSym === '↑' || curSym === '↓') {
         const leftVal  = parseFloat(numLeft.textContent)  || 0;
@@ -757,7 +873,11 @@ function makeAltitudeWidget(altText) {
     input.addEventListener('blur', commitRight);
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); commitRight(); input.blur(); }
-      if (e.key === 'Escape') { numRight.textContent = current; }
+      if (e.key === 'Escape') {
+        numRight.textContent = current;
+        if (undoStack.length > 0) undoStack.pop();
+        document.getElementById('undo-btn').disabled = undoStack.length === 0;
+      }
       e.stopPropagation();
     });
     input.addEventListener('click', e => e.stopPropagation());
@@ -773,6 +893,7 @@ function makeAltitudeWidget(altText) {
 
 function startNumEdit(el) {
   const current = el.textContent;
+  snapshotForUndo(); // snapshot before editing begins
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'alt-num-input';
@@ -785,12 +906,20 @@ function startNumEdit(el) {
   function commit() {
     const val = input.value.trim() || current;
     el.textContent = val;
+    if (val === current && undoStack.length > 0) {
+      undoStack.pop();
+      document.getElementById('undo-btn').disabled = undoStack.length === 0;
+    }
   }
 
   input.addEventListener('blur', commit);
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); commit(); input.blur(); }
-    if (e.key === 'Escape') { el.textContent = current; }
+    if (e.key === 'Escape') {
+      el.textContent = current;
+      if (undoStack.length > 0) undoStack.pop();
+      document.getElementById('undo-btn').disabled = undoStack.length === 0;
+    }
     e.stopPropagation();
   });
   input.addEventListener('click', e => e.stopPropagation());
@@ -811,6 +940,7 @@ function removeGhost() {
 }
 
 function clearAll() {
+  if (document.querySelectorAll('.custom-dot').length > 0) snapshotForUndo();
   document.querySelectorAll('.dot-group').forEach(el => el.remove());
   clearSVG();
   removeGhost();
@@ -887,6 +1017,8 @@ function addCustomLine(x1, y1, x2, y2, dotId) {
     handle.style.cursor = 'grabbing';
     const svgRect = svg.getBoundingClientRect();
     const scale = getScale();
+    snapshotForUndo();
+    let moved = false;
 
     function onMove(ev) {
       const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
@@ -897,10 +1029,15 @@ function addCustomLine(x1, y1, x2, y2, dotId) {
       line.setAttribute('y2', ny);
       handle.setAttribute('cx', nx);
       handle.setAttribute('cy', ny);
+      moved = true;
     }
 
     function onUp() {
       handle.style.cursor = 'grab';
+      if (!moved) {
+        undoStack.pop();
+        document.getElementById('undo-btn').disabled = undoStack.length === 0;
+      }
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       window.removeEventListener('touchmove', onMove);
@@ -939,6 +1076,8 @@ function setupDotDrag(dot, group, dotId) {
     const startY = (e.clientY - canvasRect.top)  / scale;
     const origLeft = parseFloat(group.style.left);
     const origTop  = parseFloat(group.style.top);
+    snapshotForUndo();
+    let moved = false;
 
     function onMove(ev) {
       const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
@@ -951,10 +1090,15 @@ function setupDotDrag(dot, group, dotId) {
       group.style.top  = newTop  + 'px';
       const line = document.querySelector(`.custom-line[data-dot-id="${dotId}"]`);
       if (line) { line.setAttribute('x1', newLeft); line.setAttribute('y1', newTop); }
+      moved = true;
     }
 
     function onUp() {
       dot.style.cursor = 'grab';
+      if (!moved) {
+        undoStack.pop();
+        document.getElementById('undo-btn').disabled = undoStack.length === 0;
+      }
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       window.removeEventListener('touchmove', onMove);
@@ -994,6 +1138,7 @@ function onCustomClick(e) {
   } else if (customClickStep === 1) {
     // Second click — draw the real dot and line, remove ghost
     removeGhost();
+    snapshotForUndo(); // snapshot before adding new dot
 
     const dotId = 'dot-' + Date.now();
     addCustomLine(customDotX, customDotY, x, y, dotId);
@@ -1046,7 +1191,6 @@ function onCustomClick(e) {
     }
 
     group.appendChild(textBlock);
-
     document.getElementById('canvas').appendChild(group);
 
     hint.textContent = 'Click to place a dot';
@@ -1655,6 +1799,8 @@ document.getElementById('canvas').addEventListener('touchend', (e) => {
 init().then(async () => {
   // Start in custom mode by default
   toggleCustomMode();
+  document.getElementById('undo-btn').disabled = true;
+  document.getElementById('redo-btn').disabled = true;
   // Auto-load from URL hash if present
   const hash = window.location.hash.slice(1);
   if (hash) {
