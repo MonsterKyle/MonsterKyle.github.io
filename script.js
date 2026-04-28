@@ -700,6 +700,21 @@ function isCid() {
 function isLowAlt()    { return document.getElementById('low-alt-checkbox').checked; }
 function isHighAlt()   { return document.getElementById('high-alt-checkbox').checked; }
 function isCustomAlt() { return document.getElementById('custom-alt-checkbox').checked; }
+function isLanding()   { return document.getElementById('landing-checkbox').checked; }
+
+function getLandingValue() {
+  const sel = document.getElementById('landing-select').value;
+  if (sel === 'Custom') {
+    return document.getElementById('landing-custom-input').value.trim() || 'Custom';
+  }
+  return sel;
+}
+
+// Show/hide custom landing input when dropdown changes
+document.getElementById('landing-select').addEventListener('change', () => {
+  const isCustom = document.getElementById('landing-select').value === 'Custom';
+  document.getElementById('landing-custom-input').style.display = isCustom ? 'inline' : 'none';
+});
 
 // Populate custom altitude dropdown: 0–240 in multiples of 10
 const customAltSelect = document.getElementById('custom-alt-select');
@@ -1190,6 +1205,18 @@ function onCustomClick(e) {
       textBlock.appendChild(cidEl);
     }
 
+    // Landing — always last line
+    if (isLanding()) {
+      const landingEl = document.createElement('span');
+      // Pick the right sublabel class based on what's already in the block
+      const sublabels = textBlock.querySelectorAll('.dot-sublabel, .dot-sublabel2, .dot-sublabel3');
+      const clsMap = ['dot-sublabel', 'dot-sublabel2', 'dot-sublabel3'];
+      landingEl.className = clsMap[Math.min(sublabels.length, 2)];
+      landingEl.textContent = getLandingValue();
+      makeEditableSpan(landingEl);
+      textBlock.appendChild(landingEl);
+    }
+
     group.appendChild(textBlock);
     document.getElementById('canvas').appendChild(group);
 
@@ -1314,7 +1341,7 @@ function makeReader(bytes) {
 
 // ── Preset tables for ultra-compact encoding ──────────────────
 // Known sublabel strings → single byte index
-const SUBL_PRESETS = ['KXXX','0M8','KGWO','VA','VA RWY5','RWY5'];
+const SUBL_PRESETS = ['KXXX','0M8','KGWO','VA','VA RWY5','RWY5','KVKS','KJAN','KTUL','KHKS'];
 // Alt multiples of 10 from 0-240 → index (0-24)
 const ALT_VALS = Array.from({length:25}, (_,i) => String(i*10));
 const SYM_CHARS = ['C','B','↑','↓','T'];
