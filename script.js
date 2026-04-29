@@ -62,7 +62,8 @@ async function restoreSnapshot(snap) {
   const canvas = document.getElementById('canvas');
   dots.forEach(d => {
     const dotId = 'dot-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
-    addCustomLine(d.x, d.y, d.lx, d.ly, dotId);
+    const dotCol = d.color || '#FFE033';
+    addCustomLine(d.x, d.y, d.lx, d.ly, dotId, dotCol);
 
     const group = document.createElement('div');
     group.className = 'dot-group custom-dot';
@@ -73,6 +74,8 @@ async function restoreSnapshot(snap) {
     const dot = document.createElement('div');
     dot.className = 'dot';
     dot.style.cursor = 'grab';
+    dot.style.background = dotCol;
+    dot.style.boxShadow = `0 0 10px 3px ${dotCol}88`;
     group.appendChild(dot);
     setupDotDrag(dot, group, dotId);
 
@@ -129,6 +132,10 @@ async function redo() {
   document.getElementById('redo-btn').disabled = redoStack.length === 0;
 }
 // ─────────────────────────────────────────────────────────────
+
+function getDotColor() {
+  return document.getElementById('dot-color-picker').value;
+}
 
 function togglePlacing() {
   placingEnabled = !placingEnabled;
@@ -978,14 +985,15 @@ function getEventPos(e) {
   };
 }
 
-function addCustomLine(x1, y1, x2, y2, dotId) {
+function addCustomLine(x1, y1, x2, y2, dotId, color) {
+  const col = color || '#FFE033';
   const svg = document.getElementById('line-overlay');
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   line.setAttribute('x1', x1);
   line.setAttribute('y1', y1);
   line.setAttribute('x2', x2);
   line.setAttribute('y2', y2);
-  line.setAttribute('stroke', '#FFE033');
+  line.setAttribute('stroke', col);
   line.setAttribute('stroke-width', '1.5');
   line.setAttribute('stroke-linecap', 'round');
   line.classList.add('custom-line');
@@ -997,9 +1005,9 @@ function addCustomLine(x1, y1, x2, y2, dotId) {
   handle.setAttribute('cx', x2);
   handle.setAttribute('cy', y2);
   handle.setAttribute('r', placingEnabled ? '6' : '14');
-  handle.setAttribute('fill', '#FFE033');
+  handle.setAttribute('fill', col);
   handle.setAttribute('fill-opacity', '0.01');
-  handle.setAttribute('stroke', '#FFE033');
+  handle.setAttribute('stroke', col);
   handle.setAttribute('stroke-width', '1.5');
   handle.setAttribute('stroke-opacity', '0');
   handle.style.cursor = 'grab';
@@ -1145,6 +1153,8 @@ function onCustomClick(e) {
     ghostDotEl.className = 'ghost-dot';
     ghostDotEl.style.left = x + 'px';
     ghostDotEl.style.top = y + 'px';
+    ghostDotEl.style.borderColor = getDotColor();
+    ghostDotEl.style.background = getDotColor().replace(')', ', 0.4)').replace('rgb', 'rgba');
     document.getElementById('canvas').appendChild(ghostDotEl);
 
     hint.textContent = 'Now click where the line should end';
@@ -1156,7 +1166,8 @@ function onCustomClick(e) {
     snapshotForUndo(); // snapshot before adding new dot
 
     const dotId = 'dot-' + Date.now();
-    addCustomLine(customDotX, customDotY, x, y, dotId);
+    const dotColor = getDotColor();
+    addCustomLine(customDotX, customDotY, x, y, dotId, dotColor);
 
     const cidText = isCid() ? randomCid() : null;
     const altText = randomAltitude();
@@ -1170,10 +1181,10 @@ function onCustomClick(e) {
     const dot = document.createElement('div');
     dot.className = 'dot';
     dot.style.cursor = 'grab';
+    dot.style.background = dotColor;
+    dot.style.boxShadow = `0 0 10px 3px ${dotColor}88`;
     group.appendChild(dot);
     setupDotDrag(dot, group, dotId);
-
-    // Name — editable
     const nameEl = document.createElement('span');
     nameEl.className = 'dot-label';
     nameEl.textContent = customDotName;
@@ -1419,6 +1430,12 @@ function unpackAltNum(r) {
   return r.str();
 }
 
+function rgbToHex(rgb) {
+  const m = rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  if (!m) return rgb;
+  return '#' + [m[1],m[2],m[3]].map(v => parseInt(v).toString(16).padStart(2,'0')).join('');
+}
+
 // Encode layout as compact binary
 function packLayout() {
   const buf = makeBuf();
@@ -1447,13 +1464,21 @@ function packLayout() {
     // Coordinates: x,y,lx,ly as u16; tx,ty as i16 only if non-default
     buf.u16(x); buf.u16(y); buf.u16(lx); buf.u16(ly);
 
-    // Flags: bit0=hasAlt, bit1=textMoved, bit2=hasSubl
+    // Flags: bit0=hasAlt, bit1=textMoved, bit2=hasSubl, bit3=hasColor
+    const dotEl = group.querySelector('.dot');
+    const dotColor = dotEl ? dotEl.style.background : '#FFE033';
+    const hasColor = (dotColor && dotColor !== '#FFE033' && dotColor !== 'rgb(255, 224, 51)') ? 1 : 0;
     const hasAlt    = altWidget ? 1 : 0;
     const textMoved = (tx !== 16 || ty !== -8) ? 1 : 0;
     const hasSubl   = sublabels.length > 0 ? 1 : 0;
-    buf.u8((hasSubl << 2) | (textMoved << 1) | hasAlt);
+    buf.u8((hasColor << 3) | (hasSubl << 2) | (textMoved << 1) | hasAlt);
 
     if (textMoved) { buf.i16(tx); buf.i16(ty); }
+
+    if (hasColor) {
+      // Store color as hex string
+      buf.str(dotColor.startsWith('#') ? dotColor : rgbToHex(dotColor));
+    }
 
     packName(buf, name);
 
@@ -1492,8 +1517,10 @@ function unpackLayout(bytes) {
     const hasAlt    = flags & 1;
     const textMoved = (flags >> 1) & 1;
     const hasSubl   = (flags >> 2) & 1;
+    const hasColor  = (flags >> 3) & 1;
     const tx = textMoved ? r.i16() : 16;
     const ty = textMoved ? r.i16() : -8;
+    const color = hasColor ? r.str() : '#FFE033';
     const name = unpackName(r);
     let a = null;
     if (hasAlt) {
@@ -1513,7 +1540,7 @@ function unpackLayout(bytes) {
         else           { sl.push(r.str()); }
       }
     }
-    dots.push({ x, y, lx, ly, tx, ty, n: name, a, sl });
+    dots.push({ x, y, lx, ly, tx, ty, n: name, a, sl, color });
   }
   return dots;
 }
@@ -1620,7 +1647,8 @@ async function loadFromCode(raw) {
     } : null);
     const sublabels = d.sl ?? (d.sublabels ? d.sublabels.map(s => s.text ?? s) : []);
 
-    addCustomLine(x, y, lx, ly, dotId);
+    const dotCol = d.color || '#FFE033';
+    addCustomLine(x, y, lx, ly, dotId, dotCol);
 
     const group = document.createElement('div');
     group.className = 'dot-group custom-dot';
@@ -1631,6 +1659,8 @@ async function loadFromCode(raw) {
     const dot = document.createElement('div');
     dot.className = 'dot';
     dot.style.cursor = 'grab';
+    dot.style.background = dotCol;
+    dot.style.boxShadow = `0 0 10px 3px ${dotCol}88`;
     group.appendChild(dot);
     setupDotDrag(dot, group, dotId);
 
