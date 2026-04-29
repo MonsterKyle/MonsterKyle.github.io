@@ -16,7 +16,10 @@
       <button id="undo-btn" onclick="undo()" title="Undo">&#8592;</button>
       <button id="redo-btn" onclick="redo()" title="Redo">&#8594;</button>
     </div>
-    <button id="place-toggle-btn" onclick="togglePlacing()">Placing: ON</button>
+    <div id="place-color-row">
+      <button id="place-toggle-btn" onclick="togglePlacing()">Placing: ON</button>
+      <input type="color" id="dot-color-picker" value="#FFE033" title="Dot colour" />
+    </div>
     <div id="normal-options" style="display:none; flex-direction:column; gap:10px;">
       <label id="kgwo-label">
         <input type="checkbox" id="kgwo-checkbox" />
