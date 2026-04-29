@@ -4,23 +4,31 @@
   box-sizing: border-box;
 }
 
-body {
-  width: 1078px;
-  height: 908px;
-  overflow: visible;
-  font-family: sans-serif;
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
   background: #000;
+  font-family: sans-serif;
   color: #fff;
-  transform-origin: top left;
 }
 
-html {
-  min-height: 100%;
-  display: flex;
-  justify-content: flex-start;
-  align-items: flex-start;
-  background: #000;
+#zoom-viewport {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
+  background: #000;
+  z-index: 0;
+}
+
+#zoom-world {
+  position: absolute;
+  width: 1078px;
+  height: 908px;
+  transform-origin: 0 0;
 }
 
 #bg-image {
@@ -34,10 +42,10 @@ html {
 }
 
 #controls {
-  position: absolute;
+  position: fixed;
   top: 20px;
   left: 20px;
-  z-index: 100;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -45,6 +53,7 @@ html {
   padding: 12px;
   background: rgba(0,0,0,0.35);
   border-radius: 10px;
+  pointer-events: all;
 }
 
 #generate-btn {
@@ -137,11 +146,11 @@ html {
 /* Instruction hint at top of screen */
 #custom-hint {
   display: none;
-  position: absolute;
+  position: fixed;
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 200;
+  z-index: 1000;
   background: rgba(0,0,0,0.75);
   color: #FFE033;
   font-size: 14px;
@@ -296,9 +305,7 @@ html {
   transition: color 0.15s;
   user-select: none;
   line-height: 1;
-}
-
-.dot-text-block:hover .dot-delete-btn {
+}.dot-text-block:hover .dot-delete-btn {
   color: rgba(255, 100, 100, 0.7);
 }
 
@@ -569,10 +576,10 @@ body.placing-off .dot-delete-btn:hover {
 
 /* Share/Load panel — bottom left */
 #share-panel {
-  position: absolute;
+  position: fixed;
   bottom: 20px;
   left: 20px;
-  z-index: 100;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -580,6 +587,7 @@ body.placing-off .dot-delete-btn:hover {
   padding: 12px;
   background: rgba(0,0,0,0.35);
   border-radius: 10px;
+  pointer-events: all;
 }
 
 .share-row {
@@ -747,4 +755,79 @@ body.placing-off #line-overlay .line-handle:hover {
 
 #dot-color-picker:hover {
   border-color: rgba(255,255,255,0.8);
+}
+
+.dot-color-btn {
+  position: absolute;
+  top: -2px;
+  right: -68px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0);
+  cursor: pointer;
+  transition: border-color 0.15s, opacity 0.15s;
+  opacity: 0;
+  background: #FFE033;
+  flex-shrink: 0;
+}
+
+.dot-text-block:hover .dot-color-btn {
+  opacity: 0.8;
+  border-color: rgba(255,255,255,0.6);
+}
+
+.dot-color-btn:hover {
+  opacity: 1 !important;
+  border-color: rgba(255,255,255,1) !important;
+}
+
+body.placing-off .dot-color-btn {
+  opacity: 0.6;
+  border-color: rgba(255,255,255,0.4);
+  width: 20px;
+  height: 20px;
+  right: -76px;
+  top: -4px;
+}
+
+body.placing-off .dot-color-btn:hover {
+  opacity: 1 !important;
+  border-color: rgba(255,255,255,1) !important;
+}
+
+/* Per-dot color change button */
+.dot-color-btn {
+  position: absolute;
+  top: 16px;
+  right: -18px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0);
+  cursor: pointer;
+  transition: border-color 0.15s, opacity 0.15s;
+  opacity: 0;
+  padding: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.dot-text-block:hover .dot-color-btn {
+  opacity: 0.8;
+  border-color: rgba(255,255,255,0.6);
+}
+
+.dot-color-btn:hover {
+  opacity: 1 !important;
+  border-color: #fff !important;
+}
+
+body.placing-off .dot-color-btn {
+  opacity: 0.6;
+  border-color: rgba(255,255,255,0.5);
+  width: 20px;
+  height: 20px;
+  right: -20px;
+  top: 18px;
 }
