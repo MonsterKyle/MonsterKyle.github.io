@@ -726,3 +726,25 @@ body.placing-off #line-overlay .line-handle:hover {
 #landing-custom-input:focus {
   border-color: #FFE033;
 }
+
+#place-color-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+#dot-color-picker {
+  width: 32px;
+  height: 32px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+#dot-color-picker:hover {
+  border-color: rgba(255,255,255,0.8);
+}
