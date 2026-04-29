@@ -108,6 +108,10 @@ async function restoreSnapshot(snap) {
     });
 
     group.appendChild(textBlock);
+    // Init color swatch to match dot color
+    const swatch = group.querySelector('.dot-color-btn');
+    const dotColorEl = group.querySelector('.dot');
+    if (swatch && dotColorEl) swatch.style.background = dotColorEl.style.background || '#FFE033';
     canvas.appendChild(group);
   });
 }
@@ -402,6 +406,61 @@ function makeDraggableTextBlock(initialOffsetX, initialOffsetY) {
   deleteBtn.innerHTML = '✕';
   block.appendChild(deleteBtn);
 
+  // Color swatch button — appears on hover, opens color picker
+  const colorBtn = document.createElement('div');
+  colorBtn.className = 'dot-color-btn';
+  colorBtn.title = 'Change colour';
+  const colorInput = document.createElement('input');
+  colorInput.type = 'color';
+  colorInput.style.cssText = 'position:absolute;opacity:0;width:100%;height:100%;top:0;left:0;cursor:pointer;';
+  colorBtn.appendChild(colorInput);
+  block.appendChild(colorBtn);
+
+  colorInput.addEventListener('input', (e) => {
+    e.stopPropagation();
+    const newColor = colorInput.value;
+    const group = block.closest('.dot-group');
+    if (!group) return;
+    const dotId = group.dataset.dotId;
+    const dot = group.querySelector('.dot');
+    if (dot) {
+      dot.style.background = newColor;
+      dot.style.boxShadow = `0 0 10px 3px ${newColor}88`;
+    }
+    const lineEl = document.querySelector(`.custom-line[data-dot-id="${dotId}"]`);
+    if (lineEl) lineEl.setAttribute('stroke', newColor);
+    const handleEl = document.querySelector(`.line-handle[data-dot-id="${dotId}"]`);
+    if (handleEl) {
+      handleEl.setAttribute('fill', newColor);
+      handleEl.setAttribute('stroke', newColor);
+    }
+    colorBtn.style.background = newColor;
+  });
+
+  // Snapshot before color change begins (mousedown on the swatch)
+  colorInput.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    snapshotForUndo();
+  });
+  colorInput.addEventListener('touchstart', (e) => {
+    e.stopPropagation();
+    snapshotForUndo();
+  }, { passive: true });
+  colorInput.addEventListener('click', e => e.stopPropagation());
+  colorInput.addEventListener('change', e => e.stopPropagation());
+
+  // Initialise swatch once the block is in the DOM
+  requestAnimationFrame(() => {
+    const group = block.closest('.dot-group');
+    if (group) {
+      const dot = group.querySelector('.dot');
+      if (dot && dot.style.background) {
+        colorInput.value = rgbToHex(dot.style.background) || '#FFE033';
+        colorBtn.style.background = colorInput.value;
+      }
+    }
+  });
+
   deleteBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     snapshotForUndo();
@@ -438,9 +497,7 @@ function makeDraggableTextBlock(initialOffsetX, initialOffsetY) {
     altDropdownInteracting = true;
     setTimeout(() => { altDropdownInteracting = false; }, 300);
     handle.style.cursor = 'grabbing';
-    const scale = getScale();
-    const startX = e.clientX / scale;
-    const startY = e.clientY / scale;
+    const startW = screenToWorld(e.clientX, e.clientY);
     const origX = offsetX;
     const origY = offsetY;
     snapshotForUndo();
@@ -449,8 +506,9 @@ function makeDraggableTextBlock(initialOffsetX, initialOffsetY) {
     function onMove(ev) {
       const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
       const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
-      let nx = origX + (cx / scale - startX);
-      let ny = origY + (cy / scale - startY);
+      const w = screenToWorld(cx, cy);
+      let nx = origX + (w.x - startW.x);
+      let ny = origY + (w.y - startW.y);
       const dist = Math.sqrt(nx * nx + ny * ny);
       if (dist > LIMIT) {
         nx = (nx / dist) * LIMIT;
@@ -972,17 +1030,11 @@ function clearAll() {
 }
 
 function getScale() {
-  const t = document.body.style.transform;
-  return t ? parseFloat(t.replace('scale(', '').replace(')', '')) || 1 : 1;
+  return zoom;
 }
 
 function getEventPos(e) {
-  const rect = document.getElementById('canvas').getBoundingClientRect();
-  const scale = getScale();
-  return {
-    x: (e.clientX - rect.left) / scale,
-    y: (e.clientY - rect.top)  / scale
-  };
+  return screenToWorld(e.clientX, e.clientY);
 }
 
 function addCustomLine(x1, y1, x2, y2, dotId, color) {
@@ -1038,20 +1090,17 @@ function addCustomLine(x1, y1, x2, y2, dotId, color) {
     e.stopPropagation();
     e.preventDefault();
     handle.style.cursor = 'grabbing';
-    const svgRect = svg.getBoundingClientRect();
-    const scale = getScale();
     snapshotForUndo();
     let moved = false;
 
     function onMove(ev) {
       const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
       const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
-      const nx = (cx - svgRect.left) / scale;
-      const ny = (cy - svgRect.top)  / scale;
-      line.setAttribute('x2', nx);
-      line.setAttribute('y2', ny);
-      handle.setAttribute('cx', nx);
-      handle.setAttribute('cy', ny);
+      const w = screenToWorld(cx, cy);
+      line.setAttribute('x2', w.x);
+      line.setAttribute('y2', w.y);
+      handle.setAttribute('cx', w.x);
+      handle.setAttribute('cy', w.y);
       moved = true;
     }
 
@@ -1093,10 +1142,7 @@ function setupDotDrag(dot, group, dotId) {
     e.stopPropagation();
     e.preventDefault();
     dot.style.cursor = 'grabbing';
-    const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-    const scale = getScale();
-    const startX = (e.clientX - canvasRect.left) / scale;
-    const startY = (e.clientY - canvasRect.top)  / scale;
+    const startW = screenToWorld(e.clientX, e.clientY);
     const origLeft = parseFloat(group.style.left);
     const origTop  = parseFloat(group.style.top);
     snapshotForUndo();
@@ -1105,10 +1151,9 @@ function setupDotDrag(dot, group, dotId) {
     function onMove(ev) {
       const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
       const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
-      const nx = (cx - canvasRect.left) / scale;
-      const ny = (cy - canvasRect.top)  / scale;
-      const newLeft = origLeft + (nx - startX);
-      const newTop  = origTop  + (ny - startY);
+      const w = screenToWorld(cx, cy);
+      const newLeft = origLeft + (w.x - startW.x);
+      const newTop  = origTop  + (w.y - startW.y);
       group.style.left = newLeft + 'px';
       group.style.top  = newTop  + 'px';
       const line = document.querySelector(`.custom-line[data-dot-id="${dotId}"]`);
@@ -1786,17 +1831,113 @@ async function init() {
   generate();
 }
 
-// ── Viewport scaling ──────────────────────────────────────────
-function scaleToViewport() {
-  const scaleX = window.innerWidth  / 1078;
-  const scaleY = window.innerHeight / 908;
-  const scale  = Math.min(scaleX, scaleY);
-  document.body.style.transform = `scale(${scale})`;
-  document.body.style.marginLeft = '0px';
-  document.body.style.marginTop  = '0px';
+// ── Pan / Zoom ────────────────────────────────────────────────
+let zoom = 1;
+let panX = 0;
+let panY = 0;
+
+function applyTransform() {
+  document.getElementById('zoom-world').style.transform =
+    `translate(${panX}px, ${panY}px) scale(${zoom})`;
 }
-scaleToViewport();
-window.addEventListener('resize', scaleToViewport);
+
+function fitToViewport() {
+  const scaleX = window.innerWidth  / IMG_W;
+  const scaleY = window.innerHeight / IMG_H;
+  zoom = Math.min(scaleX, scaleY);
+  panX = 0;
+  panY = 0;
+  applyTransform();
+}
+
+function clampPan() {
+  const scaledW = IMG_W * zoom;
+  const scaledH = IMG_H * zoom;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  // Don't let the world move so far that viewport goes blank
+  panX = Math.min(0, Math.max(vw - scaledW, panX));
+  panY = Math.min(0, Math.max(vh - scaledH, panY));
+  // If scaled smaller than viewport, centre it
+  if (scaledW < vw) panX = (vw - scaledW) / 2;
+  if (scaledH < vh) panY = (vh - scaledH) / 2;
+}
+
+// Convert screen coords to world coords
+function screenToWorld(sx, sy) {
+  return { x: (sx - panX) / zoom, y: (sy - panY) / zoom };
+}
+
+// Mouse wheel zoom (desktop)
+document.getElementById('zoom-viewport').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  const newZoom = Math.min(8, Math.max(0.3, zoom * delta));
+  // Zoom toward cursor position
+  const rect = document.getElementById('zoom-viewport').getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  panX = cx - (cx - panX) * (newZoom / zoom);
+  panY = cy - (cy - panY) * (newZoom / zoom);
+  zoom = newZoom;
+  clampPan();
+  applyTransform();
+}, { passive: false });
+
+// Pinch zoom + pan (touch)
+let lastTouches = null;
+let isPinching = false;
+
+document.getElementById('zoom-viewport').addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    isPinching = true;
+    lastTouches = e.touches;
+    touchWasDrag = true; // prevent dot placement during pinch
+  }
+}, { passive: true });
+
+document.getElementById('zoom-viewport').addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2 && isPinching) {
+    e.preventDefault();
+    const t1 = e.touches[0], t2 = e.touches[1];
+    const prevT1 = lastTouches[0], prevT2 = lastTouches[1];
+
+    // Current and previous midpoints
+    const midX = (t1.clientX + t2.clientX) / 2;
+    const midY = (t1.clientY + t2.clientY) / 2;
+    const prevMidX = (prevT1.clientX + prevT2.clientX) / 2;
+    const prevMidY = (prevT1.clientY + prevT2.clientY) / 2;
+
+    // Current and previous distances
+    const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    const prevDist = Math.hypot(prevT2.clientX - prevT1.clientX, prevT2.clientY - prevT1.clientY);
+
+    const scaleDelta = prevDist > 0 ? dist / prevDist : 1;
+    const newZoom = Math.min(8, Math.max(0.3, zoom * scaleDelta));
+
+    // Zoom toward pinch midpoint
+    panX = midX - (prevMidX - panX) * (newZoom / zoom) - (midX - prevMidX);
+    panY = midY - (prevMidY - panY) * (newZoom / zoom) - (midY - prevMidY);
+    // Also pan by midpoint movement
+    panX += midX - prevMidX;
+    panY += midY - prevMidY;
+
+    zoom = newZoom;
+    clampPan();
+    applyTransform();
+    lastTouches = e.touches;
+  }
+}, { passive: false });
+
+document.getElementById('zoom-viewport').addEventListener('touchend', (e) => {
+  if (e.touches.length < 2) {
+    isPinching = false;
+    lastTouches = null;
+  }
+}, { passive: true });
+
+window.addEventListener('resize', () => { clampPan(); applyTransform(); });
+fitToViewport();
 
 // ── Touch support ─────────────────────────────────────────────
 let touchWasDrag = false;
