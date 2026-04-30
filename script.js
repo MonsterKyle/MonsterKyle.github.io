@@ -42,14 +42,32 @@ const MAX_UNDO = 100;
 const undoStack = [];
 const redoStack = [];
 
+let urlUpdateTimer = null;
+async function updateURLHash() {
+  const packed = packLayout();
+  if (packed.length <= 1) {
+    // No dots — clear the hash
+    history.replaceState(null, '', window.location.pathname);
+    return;
+  }
+  const compressed = await compressBytes(packed);
+  const code = 'b' + btoa(String.fromCharCode(...compressed));
+  history.replaceState(null, '', '#' + code);
+}
+
+function scheduleURLUpdate() {
+  clearTimeout(urlUpdateTimer);
+  urlUpdateTimer = setTimeout(updateURLHash, 800);
+}
+
 function snapshotForUndo() {
   const snap = packLayout();
   undoStack.push(snap);
   if (undoStack.length > MAX_UNDO) undoStack.shift();
-  // Any new action clears redo history
   redoStack.length = 0;
   document.getElementById('undo-btn').disabled = false;
   document.getElementById('redo-btn').disabled = true;
+  scheduleURLUpdate();
 }
 
 async function restoreSnapshot(snap) {
@@ -118,27 +136,36 @@ async function restoreSnapshot(snap) {
 
 async function undo() {
   if (undoStack.length === 0) return;
-  // Push current state to redo stack before restoring
   redoStack.push(packLayout());
   const snap = undoStack.pop();
   await restoreSnapshot(snap);
   document.getElementById('undo-btn').disabled = undoStack.length === 0;
   document.getElementById('redo-btn').disabled = false;
+  scheduleURLUpdate();
 }
 
 async function redo() {
   if (redoStack.length === 0) return;
-  // Push current state to undo stack before restoring
   undoStack.push(packLayout());
   const snap = redoStack.pop();
   await restoreSnapshot(snap);
   document.getElementById('undo-btn').disabled = false;
   document.getElementById('redo-btn').disabled = redoStack.length === 0;
+  scheduleURLUpdate();
 }
 // ─────────────────────────────────────────────────────────────
 
 function getDotColor() {
   return document.getElementById('dot-color-picker').value;
+}
+
+function toggleOptions() {
+  const menu = document.getElementById('options-menu');
+  const btn  = document.getElementById('options-toggle-btn');
+  const open = menu.style.display === 'flex';
+  menu.style.display = open ? 'none' : 'flex';
+  btn.textContent = open ? 'Options ▾' : 'Options ▴';
+  btn.classList.toggle('open', !open);
 }
 
 function togglePlacing() {
@@ -736,6 +763,7 @@ function toggleCustomMode() {
     document.getElementById('canvas').style.zIndex = '55';
     document.getElementById('canvas').style.cursor = 'crosshair';
     document.getElementById('line-overlay').style.zIndex = '60';
+    document.getElementById('zoom-viewport').style.cursor = 'crosshair';
     document.querySelectorAll('.dot-group:not(.custom-dot)').forEach(el => el.remove());
     clearSVG();
   }
@@ -752,6 +780,7 @@ function toggleCustomMode() {
     document.getElementById('canvas').style.zIndex = '1';
     document.getElementById('canvas').style.cursor = 'default';
     document.getElementById('line-overlay').style.zIndex = '2';
+    document.getElementById('zoom-viewport').style.cursor = 'grab';
     removeGhost();
     customClickStep = 0;
   }
@@ -1027,6 +1056,7 @@ function clearAll() {
   customClickStep = 0;
   const hint = document.getElementById('custom-hint');
   if (hint) hint.textContent = 'Click to place a dot';
+  scheduleURLUpdate();
 }
 
 function getScale() {
@@ -1855,12 +1885,10 @@ function clampPan() {
   const scaledH = IMG_H * zoom;
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  // Don't let the world move so far that viewport goes blank
-  panX = Math.min(0, Math.max(vw - scaledW, panX));
-  panY = Math.min(0, Math.max(vh - scaledH, panY));
-  // If scaled smaller than viewport, centre it
-  if (scaledW < vw) panX = (vw - scaledW) / 2;
-  if (scaledH < vh) panY = (vh - scaledH) / 2;
+  // How much of the image must remain visible (in screen pixels)
+  const margin = 60;
+  panX = Math.min(vw - margin, Math.max(margin - scaledW, panX));
+  panY = Math.min(vh - margin, Math.max(margin - scaledH, panY));
 }
 
 // Convert screen coords to world coords
@@ -1873,7 +1901,6 @@ document.getElementById('zoom-viewport').addEventListener('wheel', (e) => {
   e.preventDefault();
   const delta = e.deltaY > 0 ? 0.9 : 1.1;
   const newZoom = Math.min(8, Math.max(0.3, zoom * delta));
-  // Zoom toward cursor position
   const rect = document.getElementById('zoom-viewport').getBoundingClientRect();
   const cx = e.clientX - rect.left;
   const cy = e.clientY - rect.top;
@@ -1883,6 +1910,41 @@ document.getElementById('zoom-viewport').addEventListener('wheel', (e) => {
   clampPan();
   applyTransform();
 }, { passive: false });
+
+// Mouse drag to pan (desktop, placing OFF only)
+let mousePanning = false;
+let mousePanStartX = 0, mousePanStartY = 0;
+let mousePanOriginX = 0, mousePanOriginY = 0;
+
+document.getElementById('zoom-viewport').addEventListener('mousedown', (e) => {
+  if (placingEnabled) return;       // only pan when placing is off
+  if (e.button !== 0) return;       // left button only
+  // Don't start panning if clicking on a dot/handle/text
+  if (e.target.closest('.dot-group') ||
+      e.target.closest('.line-handle') ||
+      e.target.closest('#controls') ||
+      e.target.closest('#share-panel')) return;
+  mousePanning = true;
+  mousePanStartX = e.clientX;
+  mousePanStartY = e.clientY;
+  mousePanOriginX = panX;
+  mousePanOriginY = panY;
+  document.getElementById('zoom-viewport').style.cursor = 'grabbing';
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!mousePanning) return;
+  panX = mousePanOriginX + (e.clientX - mousePanStartX);
+  panY = mousePanOriginY + (e.clientY - mousePanStartY);
+  clampPan();
+  applyTransform();
+});
+
+window.addEventListener('mouseup', () => {
+  if (!mousePanning) return;
+  mousePanning = false;
+  document.getElementById('zoom-viewport').style.cursor = placingEnabled ? 'crosshair' : 'grab';
+});
 
 // Pinch zoom + pan (touch)
 let lastTouches = null;
