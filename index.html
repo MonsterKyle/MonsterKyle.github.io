@@ -7,21 +7,22 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<div id="zoom-viewport">
-  <div id="zoom-world">
-    <img id="bg-image" src="d66.svg" alt="" />
-    <div id="controls">
-      <button id="generate-btn" onclick="generate()" style="display:none;">Generate</button>
-      <!-- <button id="custom-btn" onclick="toggleCustomMode()">Custom Mode</button> -->
-      <div id="clear-undo-row">
-        <button id="clear-btn" onclick="clearAll()">Clear All</button>
-        <button id="undo-btn" onclick="undo()" title="Undo">&#8592;</button>
-        <button id="redo-btn" onclick="redo()" title="Redo">&#8594;</button>
-      </div>
-      <div id="place-color-row">
-        <button id="place-toggle-btn" onclick="togglePlacing()">Placing: ON</button>
-        <input type="color" id="dot-color-picker" value="#FFE033" title="Dot colour" />
-      </div>
+
+  <!-- Fixed UI — outside zoom world so it never moves or scales -->
+  <div id="controls">
+    <button id="generate-btn" onclick="generate()" style="display:none;">Generate</button>
+    <!-- <button id="custom-btn" onclick="toggleCustomMode()">Custom Mode</button> -->
+    <div id="clear-undo-row">
+      <button id="clear-btn" onclick="clearAll()">Clear All</button>
+      <button id="undo-btn" onclick="undo()" title="Undo">&#8592;</button>
+      <button id="redo-btn" onclick="redo()" title="Redo">&#8594;</button>
+    </div>
+    <div id="place-color-row">
+      <button id="place-toggle-btn" onclick="togglePlacing()">Placing: ON</button>
+      <input type="color" id="dot-color-picker" value="#FFE033" title="Dot colour" />
+    </div>
+    <button id="options-toggle-btn" onclick="toggleOptions()">Options ▾</button>
+    <div id="options-menu" style="display:none; flex-direction:column; gap:10px;">
       <div id="normal-options" style="display:none; flex-direction:column; gap:10px;">
         <label id="kgwo-label"><input type="checkbox" id="kgwo-checkbox" /> KGWO</label>
         <label id="om8-label"><input type="checkbox" id="om8-checkbox" /> 0M8</label>
@@ -51,39 +52,45 @@
         </label>
       </div>
     </div>
+  </div>
 
-    <!-- Share/Load panel — bottom left -->
-    <div id="share-panel">
-      <div class="share-row">
-        <button id="load-btn" onclick="toggleLoadInput()">Load Code</button>
-        <div id="load-input-row" style="display:none;">
-          <input id="load-code" type="text" placeholder="Paste code/URL here" />
-          <button id="load-submit-btn" onclick="loadLayout()">Load</button>
-        </div>
-      </div>
-      <div class="share-row">
-        <button id="share-btn" onclick="shareLayout()">Share</button>
-        <div id="share-output" style="display:none;">
-          <input id="share-code" type="text" readonly />
-          <button id="copy-btn" onclick="copyCode()">Copy Code</button>
-          <button id="copy-url-btn" onclick="copyURL()">Copy URL</button>
-        </div>
+  <div id="share-panel">
+    <div class="share-row">
+      <button id="load-btn" onclick="toggleLoadInput()">Load Code</button>
+      <div id="load-input-row" style="display:none;">
+        <input id="load-code" type="text" placeholder="Paste code/URL here" />
+        <button id="load-submit-btn" onclick="loadLayout()">Load</button>
       </div>
     </div>
-
-    <svg id="line-overlay" viewBox="0 0 1078 908" xmlns="http://www.w3.org/2000/svg"></svg>
-    <div id="custom-overlay"></div>
-    <div id="custom-hint"></div>
-    <div id="canvas"></div>
-    <canvas id="mask-canvas" style="display:none;"></canvas>
-    <canvas id="walls-canvas" style="display:none;"></canvas>
-    <canvas id="mask-kgwo-canvas" style="display:none;"></canvas>
-    <canvas id="walls-kgwo-canvas" style="display:none;"></canvas>
-    <canvas id="mask-om8-canvas" style="display:none;"></canvas>
-    <canvas id="walls-om8-canvas" style="display:none;"></canvas>
-    <canvas id="mask-traffic-canvas" style="display:none;"></canvas>
+    <div class="share-row">
+      <button id="share-btn" onclick="shareLayout()">Share</button>
+      <div id="share-output" style="display:none;">
+        <input id="share-code" type="text" readonly />
+        <button id="copy-btn" onclick="copyCode()">Copy Code</button>
+        <button id="copy-url-btn" onclick="copyURL()">Copy URL</button>
+      </div>
+    </div>
   </div>
-</div>
+
+  <div id="custom-hint"></div>
+
+  <!-- Zoom world — everything inside here scales/pans -->
+  <div id="zoom-viewport">
+    <div id="zoom-world">
+      <img id="bg-image" src="d66.svg" alt="" />
+      <svg id="line-overlay" viewBox="0 0 1078 908" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="custom-overlay"></div>
+      <div id="canvas"></div>
+    </div>
+  </div>
+
+  <canvas id="mask-canvas" style="display:none;"></canvas>
+  <canvas id="walls-canvas" style="display:none;"></canvas>
+  <canvas id="mask-kgwo-canvas" style="display:none;"></canvas>
+  <canvas id="walls-kgwo-canvas" style="display:none;"></canvas>
+  <canvas id="mask-om8-canvas" style="display:none;"></canvas>
+  <canvas id="walls-om8-canvas" style="display:none;"></canvas>
+  <canvas id="mask-traffic-canvas" style="display:none;"></canvas>
   <script src="script.js"></script>
 </body>
 </html>
