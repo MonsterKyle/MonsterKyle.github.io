@@ -1886,7 +1886,7 @@ function clampPan() {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   // How much of the image must remain visible (in screen pixels)
-  const margin = 60;
+  const margin = 200;
   panX = Math.min(vw - margin, Math.max(margin - scaledW, panX));
   panY = Math.min(vh - margin, Math.max(margin - scaledH, panY));
 }
