@@ -831,3 +831,33 @@ body.placing-off .dot-color-btn {
   right: -20px;
   top: 18px;
 }
+
+#options-toggle-btn {
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  background: transparent;
+  color: #fff;
+  border: 1.5px solid rgba(255,255,255,0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+  width: 100%;
+}
+
+#options-toggle-btn:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.7);
+}
+
+#options-toggle-btn.open {
+  border-color: rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.08);
+}
+
+#options-menu {
+  border-left: 2px solid rgba(255,255,255,0.15);
+  padding-left: 10px;
+}
