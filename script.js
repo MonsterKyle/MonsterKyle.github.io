@@ -168,6 +168,40 @@ function toggleOptions() {
   btn.classList.toggle('open', !open);
 }
 
+function toggleBgPanel() {
+  const panel = document.getElementById('bg-panel');
+  const btn   = document.getElementById('bg-toggle-btn');
+  const open  = panel.style.display === 'flex';
+  panel.style.display = open ? 'none' : 'flex';
+  btn.textContent = open ? 'Background ▾' : 'Background ▴';
+  btn.classList.toggle('open', !open);
+}
+
+function applyBgImage(src) {
+  const img = document.getElementById('bg-image');
+  img.src = src;
+}
+
+function loadBgFromURL() {
+  const url = document.getElementById('bg-url-input').value.trim();
+  if (url) applyBgImage(url);
+}
+
+function resetBg() {
+  applyBgImage('d66.svg');
+  document.getElementById('bg-url-input').value = '';
+}
+
+// File upload handler
+document.getElementById('bg-file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => applyBgImage(ev.target.result);
+  reader.readAsDataURL(file);
+  e.target.value = ''; // reset so same file can be picked again
+});
+
 function togglePlacing() {
   placingEnabled = !placingEnabled;
   const btn = document.getElementById('place-toggle-btn');
@@ -1886,7 +1920,7 @@ function clampPan() {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   // How much of the image must remain visible (in screen pixels)
-  const margin = 200;
+  const margin = 60;
   panX = Math.min(vw - margin, Math.max(margin - scaledW, panX));
   panY = Math.min(vh - margin, Math.max(margin - scaledH, panY));
 }
@@ -1949,12 +1983,30 @@ window.addEventListener('mouseup', () => {
 // Pinch zoom + pan (touch)
 let lastTouches = null;
 let isPinching = false;
+let isTouchPanning = false;
+let touchPanStartX = 0, touchPanStartY = 0;
+let touchPanOriginX = 0, touchPanOriginY = 0;
 
 document.getElementById('zoom-viewport').addEventListener('touchstart', (e) => {
   if (e.touches.length === 2) {
     isPinching = true;
+    isTouchPanning = false;
     lastTouches = e.touches;
-    touchWasDrag = true; // prevent dot placement during pinch
+    touchWasDrag = true;
+  } else if (e.touches.length === 1 && !placingEnabled) {
+    // Single finger pan when placing is off
+    // Don't pan if touching a dot or UI element
+    const target = e.touches[0].target;
+    if (target.closest('.dot-group') ||
+        target.closest('.line-handle') ||
+        target.closest('#controls') ||
+        target.closest('#share-panel')) return;
+    isTouchPanning = true;
+    touchPanStartX = e.touches[0].clientX;
+    touchPanStartY = e.touches[0].clientY;
+    touchPanOriginX = panX;
+    touchPanOriginY = panY;
+    touchWasDrag = true;
   }
 }, { passive: true });
 
@@ -1964,23 +2016,19 @@ document.getElementById('zoom-viewport').addEventListener('touchmove', (e) => {
     const t1 = e.touches[0], t2 = e.touches[1];
     const prevT1 = lastTouches[0], prevT2 = lastTouches[1];
 
-    // Current and previous midpoints
     const midX = (t1.clientX + t2.clientX) / 2;
     const midY = (t1.clientY + t2.clientY) / 2;
     const prevMidX = (prevT1.clientX + prevT2.clientX) / 2;
     const prevMidY = (prevT1.clientY + prevT2.clientY) / 2;
 
-    // Current and previous distances
     const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
     const prevDist = Math.hypot(prevT2.clientX - prevT1.clientX, prevT2.clientY - prevT1.clientY);
 
     const scaleDelta = prevDist > 0 ? dist / prevDist : 1;
     const newZoom = Math.min(8, Math.max(0.3, zoom * scaleDelta));
 
-    // Zoom toward pinch midpoint
     panX = midX - (prevMidX - panX) * (newZoom / zoom) - (midX - prevMidX);
     panY = midY - (prevMidY - panY) * (newZoom / zoom) - (midY - prevMidY);
-    // Also pan by midpoint movement
     panX += midX - prevMidX;
     panY += midY - prevMidY;
 
@@ -1988,6 +2036,12 @@ document.getElementById('zoom-viewport').addEventListener('touchmove', (e) => {
     clampPan();
     applyTransform();
     lastTouches = e.touches;
+  } else if (e.touches.length === 1 && isTouchPanning) {
+    e.preventDefault();
+    panX = touchPanOriginX + (e.touches[0].clientX - touchPanStartX);
+    panY = touchPanOriginY + (e.touches[0].clientY - touchPanStartY);
+    clampPan();
+    applyTransform();
   }
 }, { passive: false });
 
@@ -1995,6 +2049,9 @@ document.getElementById('zoom-viewport').addEventListener('touchend', (e) => {
   if (e.touches.length < 2) {
     isPinching = false;
     lastTouches = null;
+  }
+  if (e.touches.length === 0) {
+    isTouchPanning = false;
   }
 }, { passive: true });
 
