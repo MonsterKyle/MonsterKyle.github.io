@@ -22,6 +22,18 @@
       <input type="color" id="dot-color-picker" value="#FFE033" title="Dot colour" />
     </div>
     <button id="options-toggle-btn" onclick="toggleOptions()">Options ▾</button>
+    <button id="bg-toggle-btn" onclick="toggleBgPanel()">Background ▾</button>
+    <div id="bg-panel" style="display:none; flex-direction:column; gap:6px;">
+      <div class="bg-row">
+        <button id="bg-file-btn" onclick="document.getElementById('bg-file-input').click()">Upload file</button>
+        <input type="file" id="bg-file-input" accept="image/*" style="display:none;" />
+      </div>
+      <div class="bg-row">
+        <input type="text" id="bg-url-input" placeholder="Paste image URL" />
+        <button id="bg-url-btn" onclick="loadBgFromURL()">Load</button>
+      </div>
+      <button id="bg-reset-btn" onclick="resetBg()">Reset</button>
+    </div>
     <div id="options-menu" style="display:none; flex-direction:column; gap:10px;">
       <div id="normal-options" style="display:none; flex-direction:column; gap:10px;">
         <label id="kgwo-label"><input type="checkbox" id="kgwo-checkbox" /> KGWO</label>
