@@ -943,8 +943,8 @@ function makeAltitudeWidget(altText) {
       if (chosen === '↑' || chosen === '↓') {
         const leftVal  = parseFloat(numLeft.textContent)  || 0;
         const rightVal = parseFloat(numRight.textContent) || leftVal;
-        if (rightVal > leftVal)  chosen = '↑';
-        if (rightVal < leftVal)  chosen = '↓';
+        if (rightVal > leftVal)  chosen = '↓';
+        if (rightVal < leftVal)  chosen = '↑';
       }
       snapshotForUndo();
       symText.nodeValue = chosen;
@@ -1008,8 +1008,8 @@ function makeAltitudeWidget(altText) {
       if (curSym === '↑' || curSym === '↓') {
         const leftVal  = parseFloat(numLeft.textContent)  || 0;
         const rightVal = parseFloat(val) || 0;
-        if (rightVal > leftVal)  symText.nodeValue = '↑';
-        if (rightVal < leftVal)  symText.nodeValue = '↓';
+        if (rightVal > leftVal)  symText.nodeValue = '↓';
+        if (rightVal < leftVal)  symText.nodeValue = '↑';
       }
     }
 
@@ -1477,22 +1477,22 @@ const DIGITS10   = '0123456789';
 function packName(buf, name) {
   const m = name.match(/^N(\d{2,3})([A-Z]{1,2})$/);
   if (m) {
-    const digits = parseInt(m[1], 10);  // 0-999, 10 bits
+    const digitStr = m[1];
+    const digits = parseInt(digitStr, 10);  // 0-999, 10 bits
     const lets   = m[2];
-    const l0 = LETTERS26.indexOf(lets[0]);          // 0-25, 5 bits
-    const l1 = lets.length > 1 ? LETTERS26.indexOf(lets[1]) + 1 : 0; // 0=none, 1-26, 5 bits
-    const nl = lets.length - 1; // 0 or 1
+    const l0 = LETTERS26.indexOf(lets[0]);
+    const l1 = lets.length > 1 ? LETTERS26.indexOf(lets[1]) + 1 : 0;
+    const nl = lets.length - 1;
 
-    // digits: 10 bits → split as upper5 | lower5
     const dHi = (digits >> 5) & 0x1F;
     const dLo = digits & 0x1F;
-    // l0: 5 bits → split as upper3 | lower2
     const l0Hi = (l0 >> 2) & 0x07;
     const l0Lo = l0 & 0x03;
 
     buf.u8(0x80 | (nl << 5) | dHi);
     buf.u8((dLo << 3) | l0Hi);
     buf.u8((l0Lo << 6) | l1);
+    buf.u8(digitStr.length); // store original digit count to preserve leading zeros
     return;
   }
   buf.str(name);
@@ -1504,6 +1504,7 @@ function unpackName(r) {
     r.u8();
     const b1 = r.u8();
     const b2 = r.u8();
+    const digitLen = r.u8(); // original digit string length
     const nl   = (b0 >> 5) & 1;
     const dHi  = b0 & 0x1F;
     const dLo  = (b1 >> 3) & 0x1F;
@@ -1514,7 +1515,8 @@ function unpackName(r) {
     const digits = (dHi << 5) | dLo;
     const l0     = (l0Hi << 2) | l0Lo;
 
-    let name = 'N' + digits + LETTERS26[l0];
+    const digitStr = String(digits).padStart(digitLen, '0');
+    let name = 'N' + digitStr + LETTERS26[l0];
     if (nl) name += LETTERS26[l1 - 1];
     return name;
   }
